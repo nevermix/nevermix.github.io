@@ -578,7 +578,15 @@
 
     const adminPanel = $('admin-panel');
     if (!adminPanel) return;
-    if (currentUser && currentUser.email === ADMIN_EMAIL) {
+    let email = '';
+    if (currentUser) {
+      email = currentUser.email || '';
+      if (!email && currentUser.providerData && currentUser.providerData.length) {
+        email = currentUser.providerData[0].email || '';
+      }
+    }
+    console.log('[admin check] email:', email, 'expect:', ADMIN_EMAIL);
+    if (email.toLowerCase() === ADMIN_EMAIL) {
       adminPanel.style.display = '';
       MozeSync.fetchUserCount(function (count, uids) {
         const countEl = $('admin-user-count');
