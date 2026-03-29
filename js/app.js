@@ -20,6 +20,7 @@
   let calMonth = MozeData.monthKey(MozeData.today());
   let selectedProjectId = '';
   let reportRange = 1;
+  let currentUser = null;
 
   function initRange() {
     const t = MozeData.today();
@@ -577,8 +578,7 @@
 
     const adminPanel = $('admin-panel');
     if (!adminPanel) return;
-    const user = typeof MozeSync !== 'undefined' ? MozeSync.getCurrentUser() : null;
-    if (user && user.email === ADMIN_EMAIL) {
+    if (currentUser && currentUser.email === ADMIN_EMAIL) {
       adminPanel.style.display = '';
       MozeSync.fetchUserCount(function (count, uids) {
         const countEl = $('admin-user-count');
@@ -1025,6 +1025,7 @@
 
   /* ─── 登入 / 登出 UI ─── */
   function showApp(user) {
+    currentUser = user || null;
     const loginScreen = $('login-screen');
     const appLayout = $('app-layout');
     if (loginScreen) loginScreen.style.display = 'none';
