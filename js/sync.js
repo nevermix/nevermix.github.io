@@ -5,7 +5,7 @@ var MozeSync = (function () {
 
   var FIREBASE_CONFIG = {
     apiKey: 'AIzaSyAEbehc911kz5Uvx7D4DQ6pAcqN7lPQgpg',
-    authDomain: 'kevin1542638-sketch.github.io',
+    authDomain: 'moze-lite.firebaseapp.com',
     databaseURL: 'https://moze-lite-default-rtdb.firebaseio.com',
     projectId: 'moze-lite',
   };
@@ -49,14 +49,19 @@ var MozeSync = (function () {
   function signInWithGoogle() {
     initFirebase();
     var provider = new firebase.auth.GoogleAuthProvider();
-    setLoginHint('正在跳轉…');
-    return auth.signInWithPopup(provider).catch(function (err) {
-      if (err.code === 'auth/popup-blocked' || err.code === 'auth/popup-closed-by-user' ||
-          err.code === 'auth/operation-not-supported-in-this-environment') {
+    setLoginHint('正在登入…');
+    return auth.signInWithPopup(provider).then(function (result) {
+      setLoginHint('');
+    }).catch(function (err) {
+      console.warn('popup login error:', err.code, err.message);
+      if (err.code === 'auth/popup-blocked' ||
+          err.code === 'auth/popup-closed-by-user' ||
+          err.code === 'auth/operation-not-supported-in-this-environment' ||
+          err.code === 'auth/cancelled-popup-request') {
+        setLoginHint('正在跳轉至 Google…');
         return auth.signInWithRedirect(provider);
       }
-      setLoginHint('登入失敗：' + err.message);
-      throw err;
+      setLoginHint('登入失敗：' + (err.code || '') + ' ' + err.message);
     });
   }
 
@@ -68,17 +73,19 @@ var MozeSync = (function () {
 
   function onAuthChanged(callback) {
     initFirebase();
-    if (!auth) return;
+    if (!auth) { setLoginHint('Firebase 初始化失敗'); return; }
 
     auth.getRedirectResult().then(function (result) {
       if (result && result.user) {
-        callback(result.user);
+        setLoginHint('');
       }
     }).catch(function (err) {
-      setLoginHint('登入失敗：' + err.message);
+      console.warn('redirect result error:', err.code, err.message);
+      setLoginHint('登入失敗：' + (err.code || '') + ' ' + err.message);
     });
 
     auth.onAuthStateChanged(function (user) {
+      if (user) { setLoginHint(''); }
       callback(user);
     });
   }
