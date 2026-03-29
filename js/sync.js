@@ -50,18 +50,11 @@ var MozeSync = (function () {
     initFirebase();
     var provider = new firebase.auth.GoogleAuthProvider();
     setLoginHint('正在登入…');
-    return auth.signInWithPopup(provider).then(function (result) {
-      setLoginHint('');
+    return auth.signInWithPopup(provider).then(function () {
+      setLoginHint('登入成功！');
     }).catch(function (err) {
-      console.warn('popup login error:', err.code, err.message);
-      if (err.code === 'auth/popup-blocked' ||
-          err.code === 'auth/popup-closed-by-user' ||
-          err.code === 'auth/operation-not-supported-in-this-environment' ||
-          err.code === 'auth/cancelled-popup-request') {
-        setLoginHint('正在跳轉至 Google…');
-        return auth.signInWithRedirect(provider);
-      }
-      setLoginHint('登入失敗：' + (err.code || '') + ' ' + err.message);
+      console.warn('login error:', err.code, err.message);
+      setLoginHint('登入失敗：' + (err.code || '') + '\n' + (err.message || ''));
     });
   }
 
@@ -74,15 +67,6 @@ var MozeSync = (function () {
   function onAuthChanged(callback) {
     initFirebase();
     if (!auth) { setLoginHint('Firebase 初始化失敗'); return; }
-
-    auth.getRedirectResult().then(function (result) {
-      if (result && result.user) {
-        setLoginHint('');
-      }
-    }).catch(function (err) {
-      console.warn('redirect result error:', err.code, err.message);
-      setLoginHint('登入失敗：' + (err.code || '') + ' ' + err.message);
-    });
 
     auth.onAuthStateChanged(function (user) {
       if (user) { setLoginHint(''); }
