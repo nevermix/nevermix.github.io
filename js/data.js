@@ -16,10 +16,14 @@ const DEFAULT_CATEGORIES = [
 ];
 
 const DEFAULT_ACCOUNTS = [
-  { id: 'acc-cash', name: '現金', group: '現金', openingBalance: 0, icon: '💵' },
+  { id: 'acc-cash',   name: '現金',     group: '現金',   openingBalance: 0, icon: '💵' },
+  { id: 'acc-ctbc',   name: '中國信託', group: '銀行',   openingBalance: 0, icon: '🏦' },
+  { id: 'acc-cathay', name: '國泰世華', group: '銀行',   openingBalance: 0, icon: '🏦' },
+  { id: 'acc-wallet', name: 'Wallet',   group: '電子支付', openingBalance: 0, icon: '📱' },
+  { id: 'acc-line',   name: 'Line Pay', group: '電子支付', openingBalance: 0, icon: '💚' },
 ];
 
-const ACCOUNT_GROUPS = ['現金', '銀行', '證券', '加密', '其他'];
+const ACCOUNT_GROUPS = ['現金', '銀行', '電子支付', '證券', '加密', '信用卡', '其他'];
 
 const CHART_COLORS = [
   '#f6c342','#4fc3f7','#e57373','#81c784','#ba68c8',
