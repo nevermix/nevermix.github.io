@@ -93,6 +93,218 @@
       : '未登入也可以送出。';
   }
 
+  const QUERY_CATEGORY_ALIASES = {
+    '餐飲': ['吃飯', '吃', '飲食', '餐費', '早餐', '午餐', '晚餐', '宵夜', '便當', '餐廳', '咖啡'],
+    '交通': ['交通', '搭車', '捷運', '公車', '計程車', '高鐵', '火車', '油錢', '停車'],
+    '購物': ['購物', '買東西', '網購', '蝦皮', 'momo'],
+    '娛樂': ['娛樂', '電影', '遊戲', '唱歌', '出遊'],
+    '醫療': ['醫療', '看病', '診所', '醫院', '藥'],
+    '帳單': ['帳單', '水電', '電話費', '房租', '保費'],
+    '其他': ['其他', '雜項'],
+    '薪資': ['薪資', '薪水', '收入', '薪金']
+  };
+
+  function formatLocalDate(date) {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+
+  function startOfWeek(date) {
+    const copy = new Date(date);
+    const day = copy.getDay();
+    const diff = day === 0 ? -6 : 1 - day;
+    copy.setDate(copy.getDate() + diff);
+    return copy;
+  }
+
+  function endOfWeek(date) {
+    const copy = startOfWeek(date);
+    copy.setDate(copy.getDate() + 6);
+    return copy;
+  }
+
+  function resolveNamedCategory(query) {
+    const categories = MozeData.getState().categories || [];
+    const direct = categories.find(c => query.includes(String(c.name || '').toLowerCase()));
+    if (direct) return direct;
+
+    return categories.find(c => {
+      const aliases = QUERY_CATEGORY_ALIASES[c.name] || [];
+      return aliases.some(alias => query.includes(alias.toLowerCase()));
+    }) || null;
+  }
+
+  function resolveNamedAccount(query) {
+    return (MozeData.getState().accounts || []).find(a =>
+      query.includes(String(a.name || '').toLowerCase())
+    ) || null;
+  }
+
+  function resolveQueryRange(query) {
+    const now = new Date();
+    let start = new Date(now);
+    let end = new Date(now);
+    let label = '今天';
+
+    if (query.includes('昨天')) {
+      start.setDate(start.getDate() - 1);
+      end = new Date(start);
+      label = '昨天';
+    } else if (query.includes('上週')) {
+      const lastWeekBase = startOfWeek(now);
+      lastWeekBase.setDate(lastWeekBase.getDate() - 7);
+      start = lastWeekBase;
+      end = endOfWeek(lastWeekBase);
+      label = '上週';
+    } else if (query.includes('本週') || query.includes('這週')) {
+      start = startOfWeek(now);
+      end = endOfWeek(now);
+      label = '本週';
+    } else if (query.includes('上個月') || query.includes('上月')) {
+      start = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      end = new Date(now.getFullYear(), now.getMonth(), 0);
+      label = '上個月';
+    } else if (query.includes('本月') || query.includes('這個月')) {
+      start = new Date(now.getFullYear(), now.getMonth(), 1);
+      end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+      label = '本月';
+    } else if (/近 ?3 ?個?月|最近 ?3 ?個?月|近三個月|最近三個月/.test(query)) {
+      start = new Date(now.getFullYear(), now.getMonth() - 2, 1);
+      end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+      label = '近 3 個月';
+    }
+
+    return {
+      start: formatLocalDate(start),
+      end: formatLocalDate(end),
+      label,
+    };
+  }
+
+  function hasExplicitRange(query) {
+    return /今天|昨天|本週|這週|上週|本月|這個月|上個月|上月|近 ?3 ?個?月|最近 ?3 ?個?月|近三個月|最近三個月/.test(query);
+  }
+
+  function detectQueryIntent(query) {
+    if (/月報表|報表|圓餅圖|圓餅|分布|分析/.test(query)) return 'report';
+    if (/幾筆|多少筆/.test(query)) return 'count';
+    if (/收入|賺|進帳/.test(query)) return 'income';
+    if (/花多少|花了多少|支出多少|花費多少|用了多少|花了|支出|花費/.test(query)) return 'expense';
+    if (/多少/.test(query)) return 'expense';
+    return '';
+  }
+
+  function parseNaturalLanguageQuery(rawQuery) {
+    const query = rawQuery.trim().toLowerCase().replace(/[？?]/g, '');
+    if (!query) return null;
+
+    const intent = detectQueryIntent(query);
+    const category = resolveNamedCategory(query);
+    const account = resolveNamedAccount(query);
+    const range = intent === 'report' && !hasExplicitRange(query)
+      ? resolveQueryRange('本月')
+      : resolveQueryRange(query);
+
+    if (!intent || (intent !== 'report' && !category && !account && !hasExplicitRange(query))) {
+      return null;
+    }
+
+    return { intent, category, account, range };
+  }
+
+  function answerNaturalLanguageQuery(rawQuery) {
+    const parsed = parseNaturalLanguageQuery(rawQuery);
+    if (!parsed) return null;
+    const normalizedQuery = rawQuery.trim().toLowerCase().replace(/[？?]/g, '');
+    const accountId = parsed.account ? parsed.account.id : 'all';
+
+    let txs = MozeData.txInRange(parsed.range.start, parsed.range.end, accountId);
+    if (parsed.category) txs = txs.filter(t => t.categoryId === parsed.category.id);
+
+    let labelType = '交易';
+    if (parsed.intent === 'count') {
+      if (/收入|賺|進帳/.test(normalizedQuery)) {
+        txs = txs.filter(t => t.type === 'income');
+        labelType = '收入';
+      } else if (/花|支出|花費/.test(normalizedQuery)) {
+        txs = txs.filter(t => t.type === 'expense');
+        labelType = '支出';
+      }
+    } else if (parsed.intent === 'income') {
+      txs = txs.filter(t => t.type === 'income');
+      labelType = '收入';
+    } else {
+      txs = txs.filter(t => t.type === 'expense');
+      labelType = '支出';
+    }
+
+    const targetLabel = parsed.category ? parsed.category.name : (parsed.account ? parsed.account.name : labelType);
+    const meta = `${parsed.range.label}｜${parsed.range.start} ~ ${parsed.range.end}`;
+
+    if (parsed.intent === 'report') {
+      const summary = MozeData.summary(parsed.range.start, parsed.range.end, accountId);
+      const categoryData = MozeData.expenseByCategory(parsed.range.start, parsed.range.end, accountId);
+      const reportTxs = txs.filter(t => t.type === 'expense');
+      return {
+        text: `${parsed.range.label}月報表已整理`,
+        meta: `${meta}｜支出 ${MozeData.formatMoney(summary.expense)}｜收入 ${MozeData.formatMoney(summary.income)}`,
+        txs: reportTxs,
+        visuals: {
+          summary,
+          categoryData,
+          title: parsed.account ? `${parsed.range.label} ${parsed.account.name} 分類圓餅圖` : `${parsed.range.label} 分類圓餅圖`,
+        }
+      };
+    }
+
+    if (parsed.intent === 'count') {
+      return {
+        text: `${parsed.range.label}${targetLabel}共有 ${txs.length} 筆`,
+        meta,
+        txs,
+      };
+    }
+
+    const total = txs.reduce((sum, tx) => sum + (parseFloat(tx.amount) || 0), 0);
+    return {
+      text: `${parsed.range.label}${targetLabel}${labelType}共 ${MozeData.formatMoney(total)}`,
+      meta: `${meta}｜共 ${txs.length} 筆`,
+      txs,
+    };
+  }
+
+  function renderSearchVisuals(visuals) {
+    const container = $('search-visuals');
+    if (!container) return;
+    if (!visuals) {
+      container.innerHTML = '';
+      return;
+    }
+
+    container.innerHTML = `
+      <div class="search-visuals-grid">
+        <div class="search-summary-card">
+          <div class="search-summary-title">月報表摘要</div>
+          <div class="search-summary-metric"><span>支出</span><span>${esc(MozeData.formatMoney(visuals.summary.expense))}</span></div>
+          <div class="search-summary-metric"><span>收入</span><span>${esc(MozeData.formatMoney(visuals.summary.income))}</span></div>
+          <div class="search-summary-metric"><span>筆數</span><span>${esc(String(visuals.summary.count))}</span></div>
+          <div class="search-summary-metric"><span>日均支出</span><span>${esc(MozeData.formatMoney(visuals.summary.daily))}</span></div>
+        </div>
+        <div class="search-chart-card">
+          <div class="search-chart-title">${esc(visuals.title)}</div>
+          <div id="search-donut-chart"></div>
+        </div>
+      </div>
+    `;
+
+    const donut = $('search-donut-chart');
+    if (donut) {
+      MozeCharts.donut(donut, visuals.categoryData, { centerLabel: '支出' });
+    }
+  }
+
   function recordClientError(payload) {
     if (typeof MozeSync !== 'undefined' && typeof MozeSync.logError === 'function') {
       MozeSync.logError(payload);
@@ -643,19 +855,58 @@
   /* ═══════════════════════════════════════ */
   function renderSearch() {
     const input = $('search-input');
+    const answer = $('search-answer');
+    const visuals = $('search-visuals');
     const results = $('search-results');
-    if (!input || !results) return;
+    if (!input || !results || !answer || !visuals) return;
     const q = input.value.trim();
     if (!q) {
-      results.innerHTML = '<div class="empty-state"><div class="empty-icon">🔍</div><p>輸入關鍵字搜尋</p></div>';
+      answer.innerHTML = '';
+      visuals.innerHTML = '';
+      results.innerHTML = '<div class="search-results-card"><div class="empty-state"><div class="empty-icon">🔍</div><p>輸入關鍵字搜尋</p></div></div>';
       return;
     }
+
+    const naturalAnswer = answerNaturalLanguageQuery(q);
+    if (naturalAnswer) {
+      answer.innerHTML = `
+        <div class="search-answer-card">
+          <div class="search-answer-label">自然語言查詢結果</div>
+          <div class="search-answer-text">${esc(naturalAnswer.text)}</div>
+          <div class="search-answer-meta">${esc(naturalAnswer.meta)}</div>
+        </div>
+      `;
+      renderSearchVisuals(naturalAnswer.visuals || null);
+      if (!naturalAnswer.txs.length) {
+        results.innerHTML = '<div class="search-results-card"><div class="empty-state"><p>這個條件下目前沒有符合的交易。</p></div></div>';
+        return;
+      }
+      results.innerHTML = `
+        <div class="search-results-card">
+          <div class="search-results-title">符合條件的交易</div>
+          ${naturalAnswer.txs
+            .slice()
+            .sort((a, b) => b.date.localeCompare(a.date) || b.time.localeCompare(a.time))
+            .map(t => txItemHTML(t)).join('')}
+        </div>
+      `;
+      bindTxDelete(results);
+      return;
+    }
+
+    answer.innerHTML = '';
+    visuals.innerHTML = '';
     const txs = MozeData.searchTx(q);
     if (!txs.length) {
-      results.innerHTML = '<div class="empty-state"><p>找不到符合的交易</p></div>';
+      results.innerHTML = '<div class="search-results-card"><div class="empty-state"><p>找不到符合的交易</p></div></div>';
       return;
     }
-    results.innerHTML = txs.map(t => txItemHTML(t)).join('');
+    results.innerHTML = `
+      <div class="search-results-card">
+        <div class="search-results-title">搜尋結果</div>
+        ${txs.map(t => txItemHTML(t)).join('')}
+      </div>
+    `;
     bindTxDelete(results);
   }
 
@@ -1151,6 +1402,14 @@
         debounce = setTimeout(renderSearch, 200);
       });
     }
+    $$el('[data-query-chip]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const search = $('search-input');
+        if (!search) return;
+        search.value = btn.dataset.queryChip || '';
+        renderSearch();
+      });
+    });
 
     /* 設定 */
     const btnSaveLiab = $('btn-save-liabilities');

@@ -351,9 +351,25 @@
 
       <!-- ⑥ 搜尋頁 -->
       <div class="view" id="view-search">
-        <div class="search-input-wrap">
-          <input type="text" id="search-input" placeholder="搜尋標題、備註、標籤、分類名...">
+        <div class="card search-shell">
+          <div class="search-shell-head">
+            <div>
+              <div class="card-title">智慧搜尋</div>
+              <div class="search-shell-copy">可以直接用自然語言問資料，也可以當一般搜尋欄使用。</div>
+            </div>
+          </div>
+          <div class="search-input-wrap">
+            <input type="text" id="search-input" placeholder="搜尋或直接問：我上個月吃飯花多少？">
+          </div>
+          <div class="search-chip-list">
+            <button class="search-chip" type="button" data-query-chip="我上個月吃飯花多少？">上月餐飲支出</button>
+            <button class="search-chip" type="button" data-query-chip="本月圓餅圖">本月圓餅圖</button>
+            <button class="search-chip" type="button" data-query-chip="上個月月報表">上月月報表</button>
+            <button class="search-chip" type="button" data-query-chip="本月交通幾筆">本月交通筆數</button>
+          </div>
         </div>
+        <div id="search-answer"></div>
+        <div id="search-visuals"></div>
         <div id="search-results"></div>
       </div>
 

@@ -246,6 +246,18 @@ const MozeData = (() => {
         projectId: clampText(t && t.projectId, '', 100),
       };
     });
+
+    state = {
+      accounts: state.accounts,
+      categories: state.categories,
+      transactions: state.transactions,
+      projects: state.projects,
+      budgets: state.budgets,
+      upcoming: state.upcoming,
+      settings: { liabilities: toNumber(state.settings && state.settings.liabilities, 0) },
+      activeAccountId: state.activeAccountId,
+      selectedAccountId: state.selectedAccountId,
+    };
   }
 
   function load() {
@@ -271,11 +283,13 @@ const MozeData = (() => {
   const _saveCallbacks = [];
 
   function save() {
+    fixState();
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     _saveCallbacks.forEach(cb => { try { cb(); } catch(e) { console.warn('save callback error', e); } });
   }
 
   function saveQuiet() {
+    fixState();
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   }
 
@@ -664,6 +678,7 @@ const MozeData = (() => {
       if (!state.upcoming) state.upcoming = [];
       if (!state.settings) state.settings = { liabilities: 0 };
       if (!state.selectedAccountId) state.selectedAccountId = state.activeAccountId;
+      fixState();
       save();
       return true;
     } catch (e) {
