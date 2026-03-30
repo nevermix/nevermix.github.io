@@ -1,2 +1,5 @@
 # Local Netlify folder
 .netlify
+.DS_Store
+HANDOFF.md
+_headers

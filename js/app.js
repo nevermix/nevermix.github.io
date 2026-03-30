@@ -80,18 +80,17 @@
     if (!isAdmin && currentView === 'errorlogs') switchView('overview');
   }
 
-  function formatErrorLogTime(isoText) {
+  function formatDateTime(isoText) {
     if (!isoText) return '';
     const d = new Date(isoText);
     if (Number.isNaN(d.getTime())) return esc(isoText);
     return d.toLocaleString('zh-TW');
   }
 
-  function formatFeedbackTime(isoText) {
-    if (!isoText) return '';
-    const d = new Date(isoText);
-    if (Number.isNaN(d.getTime())) return esc(isoText);
-    return d.toLocaleString('zh-TW');
+  function getFeedbackStatusBaseText() {
+    return currentUser
+      ? '送出後會連同登入帳號資訊一起附上。'
+      : '未登入也可以送出。';
   }
 
   function recordClientError(payload) {
@@ -664,9 +663,7 @@
     const statusEl = $('feedback-submit-status');
 
     if (statusEl && !statusEl.dataset.locked) {
-      statusEl.textContent = currentUser
-        ? '送出後會連同登入帳號資訊一起附上。'
-        : '未登入也可以送出。';
+      statusEl.textContent = getFeedbackStatusBaseText();
     }
   }
 
@@ -675,9 +672,27 @@
     if (!statusEl) return;
     delete statusEl.dataset.locked;
     statusEl.style.color = 'var(--text-dim)';
-    statusEl.textContent = currentUser
-      ? '送出後會連同登入帳號資訊一起附上。'
-      : '未登入也可以送出。';
+    statusEl.textContent = getFeedbackStatusBaseText();
+  }
+
+  function renderFeedbackInboxItems(items) {
+    return items.map(function (item) {
+      const meta = [];
+      if (item.contact) meta.push(`<span>聯絡：${esc(item.contact)}</span>`);
+      if (item.device) meta.push(`<span>裝置：${esc(item.device)}</span>`);
+      if (item.authEmail) meta.push(`<span>帳號：${esc(item.authEmail)}</span>`);
+      if (item.pageUrl) meta.push(`<span>頁面：${esc(item.pageUrl)}</span>`);
+      return `
+        <div class="feedback-item">
+          <div class="feedback-item-header">
+            <div class="feedback-item-title">問題回報</div>
+            <div class="feedback-item-time">${esc(formatDateTime(item.createdAt))}</div>
+          </div>
+          <div class="feedback-item-message">${esc(item.message || '')}</div>
+          ${meta.length ? `<div class="feedback-item-meta">${meta.join('')}</div>` : ''}
+        </div>
+      `;
+    }).join('');
   }
 
   function renderErrorLogs() {
@@ -739,7 +754,7 @@
           <div class="error-log-item">
             <div class="error-log-item-header">
               <div class="error-log-source">${esc(log.source || 'app')}</div>
-              <div class="error-log-time">${esc(formatErrorLogTime(log.createdAt))}</div>
+              <div class="error-log-time">${esc(formatDateTime(log.createdAt))}</div>
             </div>
             <div class="error-log-message">${esc(log.message || 'Unknown error')}</div>
             ${meta.length ? `<div class="error-log-meta">${meta.join('')}</div>` : ''}
@@ -772,23 +787,7 @@
         return;
       }
 
-      feedbackListEl.innerHTML = items.map(function (item) {
-        const meta = [];
-        if (item.contact) meta.push(`<span>聯絡：${esc(item.contact)}</span>`);
-        if (item.device) meta.push(`<span>裝置：${esc(item.device)}</span>`);
-        if (item.authEmail) meta.push(`<span>帳號：${esc(item.authEmail)}</span>`);
-        if (item.pageUrl) meta.push(`<span>頁面：${esc(item.pageUrl)}</span>`);
-        return `
-          <div class="feedback-item">
-            <div class="feedback-item-header">
-              <div class="feedback-item-title">問題回報</div>
-              <div class="feedback-item-time">${esc(formatFeedbackTime(item.createdAt))}</div>
-            </div>
-            <div class="feedback-item-message">${esc(item.message || '')}</div>
-            ${meta.length ? `<div class="feedback-item-meta">${meta.join('')}</div>` : ''}
-          </div>
-        `;
-      }).join('');
+      feedbackListEl.innerHTML = renderFeedbackInboxItems(items);
     });
   }
 
@@ -1424,10 +1423,6 @@
     bindGlobalErrorHandlers();
     initUpcomingAccount();
     refreshAll();
-  }
-
-  function showLogin() {
-    showApp(null);
   }
 
   /* ─── 監聽登入狀態 + 初始化 GIS 按鈕 ─── */
