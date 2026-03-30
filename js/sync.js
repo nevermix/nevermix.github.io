@@ -560,8 +560,20 @@ var MozeSync = (function () {
     if (!db || !auth || !auth.currentUser || !isAdmin(auth.currentUser)) {
       return Promise.reject(new Error('forbidden'));
     }
-    clearBufferedErrorLogs();
-    return db.ref('adminLogs/' + auth.currentUser.uid).remove();
+    var ref = db.ref('adminLogs/' + auth.currentUser.uid);
+    return ref.once('value').then(function (snapshot) {
+      var data = snapshot.val() || {};
+      var ids = Object.keys(data);
+      if (!ids.length) {
+        clearBufferedErrorLogs();
+        return;
+      }
+      return Promise.all(ids.map(function (id) {
+        return ref.child(id).remove();
+      })).then(function () {
+        clearBufferedErrorLogs();
+      });
+    });
   }
 
   function logError(input) {
