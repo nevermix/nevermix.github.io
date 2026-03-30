@@ -86,6 +86,16 @@ function dateBetween(d, start, end) {
   return d >= start && d <= end;
 }
 
+function clampText(value, fallback, maxLen) {
+  const text = value === undefined || value === null ? fallback : String(value);
+  return text.slice(0, maxLen);
+}
+
+function toNumber(value, fallback) {
+  const num = parseFloat(value);
+  return Number.isFinite(num) ? num : fallback;
+}
+
 /* ───── MozeData 單例 ───── */
 const MozeData = (() => {
   let state = null;
@@ -173,19 +183,68 @@ const MozeData = (() => {
     if (!state.categories.length)
       state.categories = JSON.parse(JSON.stringify(DEFAULT_CATEGORIES));
     if (!state.settings || typeof state.settings !== 'object') state.settings = { liabilities: 0 };
+    state.settings.liabilities = toNumber(state.settings.liabilities, 0);
+
+    state.accounts = state.accounts.map((a, idx) => ({
+      id: clampText(a && a.id, `acc-${uid()}-${idx}`, 100),
+      name: clampText(a && a.name, '帳戶', 80),
+      group: clampText(a && a.group, '其他', 40),
+      openingBalance: toNumber(a && a.openingBalance, 0),
+      icon: clampText(a && a.icon, '💵', 16),
+    }));
+
+    state.categories = state.categories.map((c, idx) => ({
+      id: clampText(c && c.id, `cat-${uid()}-${idx}`, 100),
+      name: clampText(c && c.name, '未分類', 80),
+      icon: clampText(c && c.icon, '📦', 16),
+    }));
+
+    state.projects = state.projects.map((p, idx) => ({
+      id: clampText(p && p.id, `proj-${uid()}-${idx}`, 100),
+      name: clampText(p && p.name, '專案', 80),
+      icon: clampText(p && p.icon, '📁', 16),
+      start: clampText(p && p.start, today(), 10),
+      end: clampText(p && p.end, '', 10),
+    }));
+
+    state.budgets = state.budgets.map((b, idx) => ({
+      id: clampText(b && b.id, `budget-${uid()}-${idx}`, 100),
+      projectId: clampText(b && b.projectId, '', 100),
+      categoryId: clampText(b && b.categoryId, '', 100),
+      limitMonthly: toNumber(b && b.limitMonthly, 0),
+    })).filter(b => b.projectId && b.categoryId);
+
+    state.upcoming = state.upcoming.map((u, idx) => ({
+      id: clampText(u && u.id, `up-${uid()}-${idx}`, 100),
+      title: clampText(u && u.title, '提醒', 120),
+      amount: toNumber(u && u.amount, 0),
+      type: (u && (u.type === 'income' || u.type === 'expense')) ? u.type : 'expense',
+      accountId: clampText(u && u.accountId, state.activeAccountId || 'acc-cash', 100),
+      nextDate: clampText(u && u.nextDate, today(), 10),
+    }));
+
     if (!state.activeAccountId)   state.activeAccountId = state.accounts[0].id;
     if (!state.selectedAccountId) state.selectedAccountId = state.activeAccountId;
-    state.transactions.forEach(t => {
-      if (!Array.isArray(t.tags)) t.tags = t.tags ? toArr(t.tags) : [];
-      if (t.fee === undefined) t.fee = 0;
-      if (!t.time) t.time = '00:00';
-      if (!t.title) t.title = '';
-      if (!t.projectId) t.projectId = '';
-      if (!t.toAccountId) t.toAccountId = '';
-    });
-    state.accounts.forEach(a => {
-      if (!a.icon) a.icon = '💵';
-      if (a.openingBalance === undefined) a.openingBalance = 0;
+    state.activeAccountId = clampText(state.activeAccountId, state.accounts[0].id, 100);
+    state.selectedAccountId = clampText(state.selectedAccountId, state.activeAccountId, 100);
+
+    state.transactions = state.transactions.map((t, idx) => {
+      const rawTags = Array.isArray(t && t.tags) ? t.tags : (t && t.tags ? toArr(t.tags) : []);
+      return {
+        id: clampText(t && t.id, `tx-${uid()}-${idx}`, 100),
+        type: (t && (t.type === 'expense' || t.type === 'income' || t.type === 'transfer')) ? t.type : 'expense',
+        amount: toNumber(t && t.amount, 0),
+        fee: toNumber(t && t.fee, 0),
+        accountId: clampText(t && t.accountId, state.activeAccountId, 100),
+        toAccountId: clampText(t && t.toAccountId, '', 100),
+        categoryId: clampText(t && t.categoryId, state.categories[0].id, 100),
+        date: clampText(t && t.date, today(), 10),
+        time: clampText(t && t.time, '00:00', 5),
+        title: clampText(t && t.title, '', 120),
+        note: clampText(t && t.note, '', 500),
+        tags: rawTags.map(tag => clampText(tag, '', 40)).filter(Boolean),
+        projectId: clampText(t && t.projectId, '', 100),
+      };
     });
   }
 

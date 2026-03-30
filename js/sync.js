@@ -437,12 +437,17 @@ var MozeSync = (function () {
       syncing = false;
       setLastSyncedUid(auth && auth.currentUser ? auth.currentUser.uid : '');
       setStatus('已同步 ✓', '#81c784');
-    }).catch(function () {
-      syncing = false; setStatus('同步失敗', '#e57373');
+    }).catch(function (err) {
+      syncing = false;
+      var detail = err && (err.code || err.message) ? (err.code || err.message) : 'unknown error';
+      setStatus('同步失敗', '#e57373');
       logError({
         source: 'sync',
         message: 'Push to cloud failed',
+        stack: err && err.stack ? err.stack : '',
+        context: detail,
       });
+      console.warn('pushNow failed', detail, err);
     });
   }
 
