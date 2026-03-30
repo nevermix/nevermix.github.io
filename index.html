@@ -47,7 +47,7 @@
         <span class="nav-icon">💬</span> 意見反饋
       </div>
       <div class="nav-item" data-view="errorlogs" id="nav-errorlogs" style="display:none">
-        <span class="nav-icon">🚨</span> 報錯日誌
+        <span class="nav-icon">🚨</span> 開發者欄位
       </div>
       <div class="nav-item" data-view="settings">
         <span class="nav-icon">⚙️</span> 設定
@@ -375,29 +375,15 @@
             <div class="feedback-status" id="feedback-submit-status">未登入也可以送出。</div>
           </div>
         </div>
-        <div class="card" id="feedback-inbox-card" style="display:none">
-          <div class="card-title">反饋收件匣</div>
-          <div class="error-log-toolbar">
-            <div>
-              <div class="error-log-count-label">總筆數</div>
-              <div class="error-log-count" id="feedback-inbox-count">0</div>
-            </div>
-            <div class="error-log-actions">
-              <button class="btn btn-secondary btn-sm" id="btn-refresh-feedback" type="button">重新整理</button>
-            </div>
-          </div>
-          <div id="feedback-inbox-status" class="error-log-status">僅管理員帳號可查看此頁面。</div>
-          <div id="feedback-inbox-list" class="feedback-list"></div>
-        </div>
       </div>
 
       <!-- ⑧ 報錯日誌頁 -->
       <div class="view" id="view-errorlogs">
         <div class="card">
-          <div class="card-title">報錯日誌</div>
+          <div class="card-title">開發者欄位</div>
           <div class="error-log-toolbar">
             <div>
-              <div class="error-log-count-label">總筆數</div>
+              <div class="error-log-count-label">報錯總筆數</div>
               <div class="error-log-count" id="error-log-count">0</div>
             </div>
             <div class="error-log-actions">
@@ -407,6 +393,20 @@
           </div>
           <div id="error-log-status" class="error-log-status">僅管理員帳號可查看此頁面。</div>
           <div id="error-log-list"></div>
+        </div>
+        <div class="card">
+          <div class="card-title">意見反饋收件匣</div>
+          <div class="error-log-toolbar">
+            <div>
+              <div class="error-log-count-label">反饋總筆數</div>
+              <div class="error-log-count" id="feedback-inbox-count">0</div>
+            </div>
+            <div class="error-log-actions">
+              <button class="btn btn-secondary btn-sm" id="btn-refresh-feedback" type="button">重新整理</button>
+            </div>
+          </div>
+          <div id="feedback-inbox-status" class="error-log-status">僅管理員帳號可查看此頁面。</div>
+          <div id="feedback-inbox-list" class="feedback-list"></div>
         </div>
       </div>
 

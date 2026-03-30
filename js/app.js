@@ -147,7 +147,7 @@
     if (target) target.classList.add('active');
     $$el('.sidebar-nav .nav-item').forEach(n => n.classList.toggle('active', n.dataset.view === name));
     $$el('.bottom-nav .bnav-item').forEach(n => n.classList.toggle('active', n.dataset.view === name));
-    const titles = { overview: '概覽', accounts: '帳戶', ledger: '流水帳', reports: '報表', projects: '專案', search: '搜尋', feedback: '意見反饋', errorlogs: '報錯日誌', settings: '設定' };
+    const titles = { overview: '概覽', accounts: '帳戶', ledger: '流水帳', reports: '報表', projects: '專案', search: '搜尋', feedback: '意見反饋', errorlogs: '開發者欄位', settings: '設定' };
     const tt = $('topbar-title');
     if (tt) tt.textContent = titles[name] || name;
     refreshCurrentView();
@@ -662,63 +662,12 @@
 
   function renderFeedback() {
     const statusEl = $('feedback-submit-status');
-    const inboxCard = $('feedback-inbox-card');
-    const countEl = $('feedback-inbox-count');
-    const inboxStatusEl = $('feedback-inbox-status');
-    const inboxListEl = $('feedback-inbox-list');
-    const isAdmin = typeof MozeSync !== 'undefined' && typeof MozeSync.isAdmin === 'function' && MozeSync.isAdmin(currentUser);
 
     if (statusEl && !statusEl.dataset.locked) {
       statusEl.textContent = currentUser
         ? '送出後會連同登入帳號資訊一起附上。'
         : '未登入也可以送出。';
     }
-
-    if (!inboxCard || !countEl || !inboxStatusEl || !inboxListEl) return;
-    inboxCard.style.display = isAdmin ? '' : 'none';
-    if (!isAdmin) return;
-
-    inboxStatusEl.textContent = '讀取中…';
-    if (typeof MozeSync === 'undefined' || typeof MozeSync.fetchFeedback !== 'function') {
-      countEl.textContent = '0';
-      inboxStatusEl.textContent = '反饋模組未載入。';
-      inboxListEl.innerHTML = '<div class="empty-state"><p>無法讀取反饋內容。</p></div>';
-      return;
-    }
-
-    MozeSync.fetchFeedback(function (err, items) {
-      if (err) {
-        countEl.textContent = '0';
-        inboxStatusEl.textContent = '讀取失敗，請稍後再試。';
-        inboxListEl.innerHTML = '<div class="empty-state"><p>無法讀取反饋內容。</p></div>';
-        return;
-      }
-
-      countEl.textContent = items.length;
-      inboxStatusEl.textContent = items.length ? '只有管理員帳號可以查看這些反饋。' : '目前沒有收到反饋。';
-      if (!items.length) {
-        inboxListEl.innerHTML = '<div class="empty-state"><p>目前沒有收到反饋。</p></div>';
-        return;
-      }
-
-      inboxListEl.innerHTML = items.map(function (item) {
-        const meta = [];
-        if (item.contact) meta.push(`<span>聯絡：${esc(item.contact)}</span>`);
-        if (item.device) meta.push(`<span>裝置：${esc(item.device)}</span>`);
-        if (item.authEmail) meta.push(`<span>帳號：${esc(item.authEmail)}</span>`);
-        if (item.pageUrl) meta.push(`<span>頁面：${esc(item.pageUrl)}</span>`);
-        return `
-          <div class="feedback-item">
-            <div class="feedback-item-header">
-              <div class="feedback-item-title">問題回報</div>
-              <div class="feedback-item-time">${esc(formatFeedbackTime(item.createdAt))}</div>
-            </div>
-            <div class="feedback-item-message">${esc(item.message || '')}</div>
-            ${meta.length ? `<div class="feedback-item-meta">${meta.join('')}</div>` : ''}
-          </div>
-        `;
-      }).join('');
-    });
   }
 
   function resetFeedbackStatus() {
@@ -736,13 +685,19 @@
     const countEl = $('error-log-count');
     const statusEl = $('error-log-status');
     const listEl = $('error-log-list');
+    const feedbackCountEl = $('feedback-inbox-count');
+    const feedbackStatusEl = $('feedback-inbox-status');
+    const feedbackListEl = $('feedback-inbox-list');
 
-    if (!countEl || !statusEl || !listEl) return;
+    if (!countEl || !statusEl || !listEl || !feedbackCountEl || !feedbackStatusEl || !feedbackListEl) return;
 
     if (!isAdmin) {
       countEl.textContent = '0';
       statusEl.textContent = '僅管理員帳號可查看此頁面。';
       listEl.innerHTML = '<div class="empty-state"><p>你沒有權限查看報錯日誌。</p></div>';
+      feedbackCountEl.textContent = '0';
+      feedbackStatusEl.textContent = '僅管理員帳號可查看此頁面。';
+      feedbackListEl.innerHTML = '<div class="empty-state"><p>你沒有權限查看意見反饋。</p></div>';
       return;
     }
 
@@ -789,6 +744,48 @@
             <div class="error-log-message">${esc(log.message || 'Unknown error')}</div>
             ${meta.length ? `<div class="error-log-meta">${meta.join('')}</div>` : ''}
             ${log.stack ? `<pre class="error-log-stack">${esc(log.stack)}</pre>` : ''}
+          </div>
+        `;
+      }).join('');
+    });
+
+    feedbackStatusEl.textContent = '讀取中…';
+    if (typeof MozeSync === 'undefined' || typeof MozeSync.fetchFeedback !== 'function') {
+      feedbackCountEl.textContent = '0';
+      feedbackStatusEl.textContent = '反饋模組未載入。';
+      feedbackListEl.innerHTML = '<div class="empty-state"><p>無法讀取反饋內容。</p></div>';
+      return;
+    }
+
+    MozeSync.fetchFeedback(function (err, items) {
+      if (err) {
+        feedbackCountEl.textContent = '0';
+        feedbackStatusEl.textContent = '讀取失敗，請稍後再試。';
+        feedbackListEl.innerHTML = '<div class="empty-state"><p>無法讀取反饋內容。</p></div>';
+        return;
+      }
+
+      feedbackCountEl.textContent = items.length;
+      feedbackStatusEl.textContent = items.length ? '只有管理員帳號可以查看這些反饋。' : '目前沒有收到反饋。';
+      if (!items.length) {
+        feedbackListEl.innerHTML = '<div class="empty-state"><p>目前沒有收到反饋。</p></div>';
+        return;
+      }
+
+      feedbackListEl.innerHTML = items.map(function (item) {
+        const meta = [];
+        if (item.contact) meta.push(`<span>聯絡：${esc(item.contact)}</span>`);
+        if (item.device) meta.push(`<span>裝置：${esc(item.device)}</span>`);
+        if (item.authEmail) meta.push(`<span>帳號：${esc(item.authEmail)}</span>`);
+        if (item.pageUrl) meta.push(`<span>頁面：${esc(item.pageUrl)}</span>`);
+        return `
+          <div class="feedback-item">
+            <div class="feedback-item-header">
+              <div class="feedback-item-title">問題回報</div>
+              <div class="feedback-item-time">${esc(formatFeedbackTime(item.createdAt))}</div>
+            </div>
+            <div class="feedback-item-message">${esc(item.message || '')}</div>
+            ${meta.length ? `<div class="feedback-item-meta">${meta.join('')}</div>` : ''}
           </div>
         `;
       }).join('');
