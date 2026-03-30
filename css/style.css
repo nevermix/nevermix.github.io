@@ -674,7 +674,10 @@ a { color: var(--accent2); text-decoration: none; }
   flex-direction: column;
   align-items: center;
   justify-content: center;
+  width: 100%;
+  max-width: 340px;
   min-height: 320px;
+  margin: 0 auto;
 }
 
 #rpt-cat-donut svg,
@@ -1407,9 +1410,12 @@ a { color: var(--accent2); text-decoration: none; }
   background: rgba(19, 20, 26, .94);
   border-top: 1px solid var(--border);
   z-index: 200;
-  justify-content: space-around;
-  padding: 6px 0 env(safe-area-inset-bottom, 6px);
+  justify-content: flex-start;
+  gap: 8px;
+  padding: 6px 10px env(safe-area-inset-bottom, 6px);
   backdrop-filter: blur(18px);
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .bottom-nav .bnav-item {
@@ -1423,6 +1429,9 @@ a { color: var(--accent2); text-decoration: none; }
   font-size: 10px;
   border: none;
   background: none;
+  min-width: 64px;
+  flex: 0 0 auto;
+  border-radius: 10px;
 }
 .bottom-nav .bnav-item.active { color: var(--accent); }
 .bottom-nav .bnav-item .bnav-icon { font-size: 20px; }
@@ -1445,6 +1454,44 @@ a { color: var(--accent2); text-decoration: none; }
   z-index: 201;
   align-items: center;
   justify-content: center;
+}
+
+@media (max-width: 1366px) {
+  .sidebar { display: none; }
+  .bottom-nav { display: flex; }
+  .fab-add { display: flex; }
+  .auth-fab { display: inline-flex; align-items: center; justify-content: center; }
+
+  .main-content { width: 100%; }
+  .view-container { padding: 16px; padding-bottom: 92px; }
+
+  .topbar {
+    height: auto;
+    min-height: var(--topbar-h);
+    padding: 12px 16px;
+    gap: 10px;
+    align-items: flex-start;
+  }
+  .topbar-range { flex-wrap: wrap; }
+
+  .overview-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .overview-body { grid-template-columns: 1fr; }
+
+  .accounts-layout { grid-template-columns: 1fr; }
+  .accounts-mid, .accounts-right { display: none; }
+  .accounts-layout.show-detail .accounts-left { display: none; }
+  .accounts-layout.show-detail .accounts-mid { display: block; }
+  .accounts-layout.show-detail .accounts-right { display: block; }
+
+  .projects-layout { grid-template-columns: 1fr; }
+  .report-grid { grid-template-columns: 1fr; }
+  #rpt-cat-donut,
+  #rpt-acc-donut {
+    max-width: 300px;
+    min-height: 280px;
+  }
+
+  .modal { width: min(92vw, 560px); }
 }
 
 @media (max-width: 900px) {
@@ -1497,6 +1544,23 @@ a { color: var(--accent2); text-decoration: none; }
   .card { padding: 16px; border-radius: 16px; }
   .tx-item { padding: 12px 0; background: transparent; }
   .settings-section { padding: 16px; }
+  .view-container { padding-bottom: 148px; }
+  .fab-add {
+    right: 16px;
+    bottom: 94px;
+    width: 50px;
+    height: 50px;
+  }
+  .auth-fab {
+    left: 14px;
+    bottom: 96px;
+    padding: 9px 12px;
+  }
+  #rpt-cat-donut,
+  #rpt-acc-donut {
+    max-width: 260px;
+    min-height: 240px;
+  }
 }
 
 /* ─── PWA / 手機端強化 ─── */
