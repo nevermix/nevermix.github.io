@@ -5,57 +5,7 @@
         ".read": "auth != null && $uid === auth.uid",
         ".write": "auth != null && $uid === auth.uid",
         "moze-data": {
-          ".validate": "!newData.exists() || (newData.child('activeAccountId').isString() && newData.child('activeAccountId').val().length <= 100 && newData.child('selectedAccountId').isString() && newData.child('selectedAccountId').val().length <= 100 && newData.child('settings').child('liabilities').isNumber())",
-          "accounts": {
-            "$entry": {
-              ".validate": "newData.hasChildren(['id', 'name', 'group', 'openingBalance', 'icon']) && newData.child('id').isString() && newData.child('id').val().length <= 100 && newData.child('name').isString() && newData.child('name').val().length <= 80 && newData.child('group').isString() && newData.child('group').val().length <= 40 && newData.child('openingBalance').isNumber() && newData.child('icon').isString() && newData.child('icon').val().length <= 16"
-            }
-          },
-          "categories": {
-            "$entry": {
-              ".validate": "newData.hasChildren(['id', 'name', 'icon']) && newData.child('id').isString() && newData.child('id').val().length <= 100 && newData.child('name').isString() && newData.child('name').val().length <= 80 && newData.child('icon').isString() && newData.child('icon').val().length <= 16"
-            }
-          },
-          "transactions": {
-            "$entry": {
-              ".validate": "newData.hasChildren(['id', 'type', 'amount', 'fee', 'accountId', 'toAccountId', 'categoryId', 'date', 'time', 'title', 'note', 'projectId']) && newData.child('id').isString() && newData.child('id').val().length <= 100 && newData.child('type').isString() && (newData.child('type').val() === 'expense' || newData.child('type').val() === 'income' || newData.child('type').val() === 'transfer') && newData.child('amount').isNumber() && newData.child('fee').isNumber() && newData.child('accountId').isString() && newData.child('accountId').val().length <= 100 && newData.child('toAccountId').isString() && newData.child('toAccountId').val().length <= 100 && newData.child('categoryId').isString() && newData.child('categoryId').val().length <= 100 && newData.child('date').isString() && newData.child('date').val().length <= 10 && newData.child('time').isString() && newData.child('time').val().length <= 5 && newData.child('title').isString() && newData.child('title').val().length <= 120 && newData.child('note').isString() && newData.child('note').val().length <= 500 && newData.child('projectId').isString() && newData.child('projectId').val().length <= 100",
-              "tags": {
-                "$tag": {
-                  ".validate": "newData.isString() && newData.val().length <= 40"
-                }
-              }
-            }
-          },
-          "projects": {
-            "$entry": {
-              ".validate": "newData.hasChildren(['id', 'name', 'icon', 'start', 'end']) && newData.child('id').isString() && newData.child('id').val().length <= 100 && newData.child('name').isString() && newData.child('name').val().length <= 80 && newData.child('icon').isString() && newData.child('icon').val().length <= 16 && newData.child('start').isString() && newData.child('start').val().length <= 10 && newData.child('end').isString() && newData.child('end').val().length <= 10"
-            }
-          },
-          "budgets": {
-            "$entry": {
-              ".validate": "newData.hasChildren(['id', 'projectId', 'categoryId', 'limitMonthly']) && newData.child('id').isString() && newData.child('id').val().length <= 100 && newData.child('projectId').isString() && newData.child('projectId').val().length <= 100 && newData.child('categoryId').isString() && newData.child('categoryId').val().length <= 100 && newData.child('limitMonthly').isNumber()"
-            }
-          },
-          "upcoming": {
-            "$entry": {
-              ".validate": "newData.hasChildren(['id', 'title', 'amount', 'type', 'accountId', 'nextDate']) && newData.child('id').isString() && newData.child('id').val().length <= 100 && newData.child('title').isString() && newData.child('title').val().length <= 120 && newData.child('amount').isNumber() && newData.child('type').isString() && (newData.child('type').val() === 'expense' || newData.child('type').val() === 'income') && newData.child('accountId').isString() && newData.child('accountId').val().length <= 100 && newData.child('nextDate').isString() && newData.child('nextDate').val().length <= 10"
-            }
-          },
-          "settings": {
-            ".validate": "newData.hasChildren(['liabilities']) && newData.child('liabilities').isNumber()",
-            "$other": {
-              ".validate": false
-            }
-          },
-          "activeAccountId": {
-            ".validate": "newData.isString() && newData.val().length <= 100"
-          },
-          "selectedAccountId": {
-            ".validate": "newData.isString() && newData.val().length <= 100"
-          },
-          "$other": {
-            ".validate": false
-          }
+          ".validate": "!newData.exists() || (newData.child('activeAccountId').isString() && newData.child('activeAccountId').val().length <= 100 && newData.child('selectedAccountId').isString() && newData.child('selectedAccountId').val().length <= 100 && newData.child('settings').child('liabilities').isNumber())"
         }
       }
     },
