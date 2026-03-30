@@ -18,12 +18,55 @@ const MozeCharts = (() => {
     return container;
   }
 
+  function resolveDonutSize(container, opts = {}) {
+    const base = opts.size || 220;
+    const maxSize = opts.maxSize || 320;
+    const minSize = opts.minSize || 220;
+    const containerWidth = container && container.clientWidth ? container.clientWidth : 0;
+    if (!containerWidth) return Math.max(minSize, Math.min(base, maxSize));
+    return Math.max(minSize, Math.min(containerWidth - 24, maxSize));
+  }
+
+  function renderEmptyDonut(container, opts = {}) {
+    const size = resolveDonutSize(container, opts);
+    const cx = size / 2, cy = size / 2;
+    const outerR = size / 2 - 10;
+    const innerR = outerR * 0.6;
+    const svg = el('svg', { width: size, height: size, viewBox: `0 0 ${size} ${size}` }, container);
+    svg.style.pointerEvents = 'none';
+
+    el('circle', {
+      cx, cy, r: outerR,
+      fill: 'none',
+      stroke: 'rgba(255,255,255,.18)',
+      'stroke-width': outerR - innerR
+    }, svg);
+    el('circle', {
+      cx, cy, r: innerR - 1,
+      fill: 'rgba(255,255,255,.05)'
+    }, svg);
+
+    el('text', { x: cx, y: cy - 6, fill: '#a5a7b1', 'font-size': '14', 'text-anchor': 'middle' }, svg).textContent = opts.centerLabel || '合計';
+    el('text', { x: cx, y: cy + 14, fill: '#707382', 'font-size': '16', 'font-weight': 'bold', 'text-anchor': 'middle' }, svg).textContent = '$0';
+
+    const legend = document.createElement('div');
+    legend.className = 'chart-legend';
+    const item = document.createElement('div');
+    item.className = 'legend-item';
+    item.innerHTML = '<span class="legend-dot" style="background:rgba(255,255,255,.14)"></span><span class="legend-label">目前沒有資料</span><span class="legend-value">$0 (0.0%)</span>';
+    legend.appendChild(item);
+    container.appendChild(legend);
+  }
+
   /* ===== 1. 圓環圖 ===== */
   function donut(container, data, opts = {}) {
     if (!clearSVG(container)) return;
-    if (!data.length) { container.innerHTML = '<p style="color:#888;text-align:center">無資料</p>'; return; }
+    if (!data.length) {
+      renderEmptyDonut(container, opts);
+      return;
+    }
 
-    const size = opts.size || 220;
+    const size = resolveDonutSize(container, opts);
     const cx = size / 2, cy = size / 2;
     const outerR = size / 2 - 10;
     const innerR = outerR * 0.6;
@@ -31,24 +74,43 @@ const MozeCharts = (() => {
     const svg = el('svg', { width: size, height: size, viewBox: `0 0 ${size} ${size}` }, container);
     svg.style.pointerEvents = 'none';
 
-    let startAngle = -Math.PI / 2;
-    data.forEach((d, i) => {
-      const pct = d.amount / total;
-      const angle = pct * 2 * Math.PI;
-      const endAngle = startAngle + angle;
-      const largeArc = angle > Math.PI ? 1 : 0;
-      const x1o = cx + outerR * Math.cos(startAngle);
-      const y1o = cy + outerR * Math.sin(startAngle);
-      const x2o = cx + outerR * Math.cos(endAngle);
-      const y2o = cy + outerR * Math.sin(endAngle);
-      const x1i = cx + innerR * Math.cos(endAngle);
-      const y1i = cy + innerR * Math.sin(endAngle);
-      const x2i = cx + innerR * Math.cos(startAngle);
-      const y2i = cy + innerR * Math.sin(startAngle);
-      const path = `M${x1o},${y1o} A${outerR},${outerR} 0 ${largeArc} 1 ${x2o},${y2o} L${x1i},${y1i} A${innerR},${innerR} 0 ${largeArc} 0 ${x2i},${y2i} Z`;
-      el('path', { d: path, fill: COLORS[i % COLORS.length], opacity: '0.9' }, svg);
-      startAngle = endAngle;
-    });
+    if (data.length === 1 || data[0].amount / total >= 0.9999) {
+      el('circle', {
+        cx, cy, r: (outerR + innerR) / 2,
+        fill: 'none',
+        stroke: COLORS[0],
+        'stroke-width': outerR - innerR,
+      }, svg);
+      el('circle', {
+        cx, cy, r: innerR - 1,
+        fill: 'rgba(15,16,20,.88)'
+      }, svg);
+    } else {
+      let startAngle = -Math.PI / 2;
+      data.forEach((d, i) => {
+        const pct = d.amount / total;
+        const angle = pct * 2 * Math.PI;
+        const endAngle = startAngle + angle;
+        const largeArc = angle > Math.PI ? 1 : 0;
+        const x1o = cx + outerR * Math.cos(startAngle);
+        const y1o = cy + outerR * Math.sin(startAngle);
+        const x2o = cx + outerR * Math.cos(endAngle);
+        const y2o = cy + outerR * Math.sin(endAngle);
+        const x1i = cx + innerR * Math.cos(endAngle);
+        const y1i = cy + innerR * Math.sin(endAngle);
+        const x2i = cx + innerR * Math.cos(startAngle);
+        const y2i = cy + innerR * Math.sin(startAngle);
+        const path = `M${x1o},${y1o} A${outerR},${outerR} 0 ${largeArc} 1 ${x2o},${y2o} L${x1i},${y1i} A${innerR},${innerR} 0 ${largeArc} 0 ${x2i},${y2i} Z`;
+        el('path', {
+          d: path,
+          fill: COLORS[i % COLORS.length],
+          opacity: '0.98',
+          stroke: 'rgba(15,16,20,.88)',
+          'stroke-width': 2
+        }, svg);
+        startAngle = endAngle;
+      });
+    }
 
     el('text', { x: cx, y: cy - 6, fill: '#fff', 'font-size': '14', 'text-anchor': 'middle' }, svg).textContent = opts.centerLabel || '合計';
     el('text', { x: cx, y: cy + 14, fill: '#f6c342', 'font-size': '16', 'font-weight': 'bold', 'text-anchor': 'middle' }, svg).textContent = MozeData.formatMoney(total);
@@ -188,7 +250,7 @@ const MozeCharts = (() => {
     if (!dayData.length) { container.innerHTML = '<p style="color:#888;text-align:center">無資料</p>'; return; }
 
     const W = opts.width || 600, H = opts.height || 250;
-    const padL = 55, padR = 15, padT = 15, padB = 40;
+    const padL = 58, padR = 58, padT = 15, padB = 40;
     const chartW = W - padL - padR;
     const chartH = H - padT - padB;
 
@@ -206,7 +268,25 @@ const MozeCharts = (() => {
     for (let i = 0; i <= 4; i++) {
       const y = padT + chartH - (i / 4) * chartH;
       el('line', { x1: padL, y1: y, x2: padL + chartW, y2: y, stroke: '#333', 'stroke-width': 0.5 }, svg);
+      el('text', {
+        x: padL - 8,
+        y: y + 4,
+        fill: '#888',
+        'font-size': '10',
+        'text-anchor': 'end'
+      }, svg).textContent = MozeData.formatMoney(maxExp * i / 4);
+      el('text', {
+        x: padL + chartW + 8,
+        y: y + 4,
+        fill: '#888',
+        'font-size': '10',
+        'text-anchor': 'start'
+      }, svg).textContent = MozeData.formatMoney(minCum + (cumRange * i / 4));
     }
+
+    el('line', { x1: padL, y1: padT, x2: padL, y2: padT + chartH, stroke: '#444', 'stroke-width': 1 }, svg);
+    el('line', { x1: padL + chartW, y1: padT, x2: padL + chartW, y2: padT + chartH, stroke: '#444', 'stroke-width': 1 }, svg);
+    el('line', { x1: padL, y1: padT + chartH, x2: padL + chartW, y2: padT + chartH, stroke: '#444', 'stroke-width': 1 }, svg);
 
     const n = dayData.length;
     const barW = Math.max(2, chartW / n * 0.6);

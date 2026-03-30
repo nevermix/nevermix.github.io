@@ -26,8 +26,8 @@ const DEFAULT_ACCOUNTS = [
 const ACCOUNT_GROUPS = ['現金', '銀行', '電子支付', '證券', '加密', '信用卡', '其他'];
 
 const CHART_COLORS = [
-  '#f6c342','#4fc3f7','#e57373','#81c784','#ba68c8',
-  '#ff8a65','#4dd0e1','#aed581','#f06292','#7986cb',
+  '#ffd54f', '#29b6f6', '#ff7043', '#66bb6a', '#ab47bc',
+  '#ef5350', '#26c6da', '#9ccc65', '#ec407a', '#5c6bc0',
 ];
 
 /* ───── 工具函式 ───── */
@@ -404,6 +404,25 @@ const MozeData = (() => {
     return t;
   }
 
+  function updateTransaction(id, tx) {
+    const t = state.transactions.find(x => x.id === id);
+    if (!t) return null;
+    t.type = tx.type || 'expense';
+    t.amount = parseFloat(tx.amount) || 0;
+    t.fee = parseFloat(tx.fee) || 0;
+    t.accountId = tx.accountId || state.activeAccountId;
+    t.toAccountId = tx.toAccountId || '';
+    t.categoryId = tx.categoryId || state.categories[0].id;
+    t.date = tx.date || today();
+    t.time = tx.time || nowTime();
+    t.title = tx.title || '';
+    t.note = tx.note || '';
+    t.tags = Array.isArray(tx.tags) ? tx.tags : [];
+    t.projectId = tx.projectId || '';
+    save();
+    return t;
+  }
+
   function deleteTransaction(id) {
     state.transactions = state.transactions.filter(x => x.id !== id);
     save();
@@ -723,7 +742,7 @@ const MozeData = (() => {
     addAccount, renameAccount, updateAccount, deleteAccount, accountTxCount,
     addCategory, updateCategory, deleteCategory, catName, catIcon,
     acctName, acctIcon,
-    addTransaction, deleteTransaction,
+    addTransaction, updateTransaction, deleteTransaction,
     addProject, deleteProject,
     setBudget, deleteBudget,
     addUpcoming, deleteUpcoming,

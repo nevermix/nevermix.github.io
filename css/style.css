@@ -633,6 +633,7 @@ a { color: var(--accent2); text-decoration: none; }
 }
 .tx-item:hover .tx-delete { opacity: 1; }
 .tx-delete:hover { color: var(--danger); }
+.tx-delete[data-edit-tx]:hover { color: var(--accent); }
 
 /* ─── 報表頁（網格） ─── */
 .report-shortcuts {
@@ -665,6 +666,28 @@ a { color: var(--accent2); text-decoration: none; }
 
 .report-grid .card.full-width {
   grid-column: 1 / -1;
+}
+
+#rpt-cat-donut,
+#rpt-acc-donut {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 320px;
+}
+
+#rpt-cat-donut svg,
+#rpt-acc-donut svg {
+  display: block;
+  margin: 0 auto;
+}
+
+#rpt-cat-donut .chart-legend,
+#rpt-acc-donut .chart-legend {
+  width: 100%;
+  max-width: 340px;
+  margin: 14px auto 0;
 }
 
 .rank-table {

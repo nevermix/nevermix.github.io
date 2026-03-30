@@ -423,15 +423,11 @@
     pctChange(cur.expense, prev.expense, 'ov-expense-change');
     pctChange(cur.income, prev.income, 'ov-income-change');
 
-    const comboData = MozeData.dailyNetCumulative(rangeStart, rangeEnd, accId);
-    const dailyExp = MozeData.expenseByDay(rangeStart, rangeEnd, accId);
-    const merged = comboData.map((d, i) => ({
-      date: d.date,
-      expense: dailyExp[i] ? dailyExp[i].amount : 0,
-      cumulative: d.cumulative,
-    }));
     const comboContainer = $('ov-combo-chart');
-    if (comboContainer) MozeCharts.comboChart(comboContainer, merged);
+    if (comboContainer) {
+      const balanceData = MozeData.accountBalanceOverTime(accId, rangeStart, rangeEnd);
+      MozeCharts.accountTrend(comboContainer, balanceData, { color: '#67c6f3' });
+    }
 
     renderCalendar();
     renderUpcoming();
@@ -1124,12 +1120,20 @@
         </div>
       </div>
       <span class="tx-amount ${amountClass}">${amountPrefix}${MozeData.formatMoney(t.amount)}${extra}</span>
+      <button class="tx-delete" data-edit-tx="${esc(t.id)}" title="編輯">✎</button>
       <button class="tx-delete" data-del-tx="${esc(t.id)}" title="刪除">✕</button>
     </div>`;
   }
 
   function bindTxDelete(container) {
     if (!container) return;
+    container.querySelectorAll('[data-edit-tx]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const tx = MozeData.getState().transactions.find(x => x.id === btn.dataset.editTx);
+        if (!tx) return;
+        openModal(tx);
+      });
+    });
     container.querySelectorAll('[data-del-tx]').forEach(btn => {
       btn.addEventListener('click', () => {
         if (confirm('確定刪除此筆交易？')) {
@@ -1179,41 +1183,58 @@
   /*           彈窗邏輯                       */
   /* ═══════════════════════════════════════ */
   let txType = 'expense';
+  let editingTxId = null;
 
-  function openModal() {
+  function openModal(existingTx) {
     const overlay = $('tx-modal-overlay');
     if (overlay) overlay.classList.add('open');
-    txType = 'expense';
+    editingTxId = existingTx && existingTx.id ? existingTx.id : null;
+    txType = existingTx && existingTx.type ? existingTx.type : 'expense';
     updateModalType();
     const s = MozeData.getState();
+    const modalTitle = $('tx-modal-title');
+    if (modalTitle) modalTitle.textContent = editingTxId ? '編輯交易' : '新增交易';
+    const saveBtn = $('btn-save-tx');
+    if (saveBtn) saveBtn.textContent = editingTxId ? '更新交易' : '儲存交易';
     populateAccountSelect('tx-account', false);
     populateAccountSelect('tx-from-account', false);
     populateAccountSelect('tx-to-account', false);
     populateCategorySelect('tx-category');
     populateProjectSelect('tx-project');
     const txAcc = $('tx-account');
-    if (txAcc) txAcc.value = s.activeAccountId;
+    if (txAcc) txAcc.value = existingTx ? (existingTx.accountId || s.activeAccountId) : s.activeAccountId;
     const txFrom = $('tx-from-account');
-    if (txFrom) txFrom.value = s.activeAccountId;
+    if (txFrom) txFrom.value = existingTx ? (existingTx.accountId || s.activeAccountId) : s.activeAccountId;
+    const txTo = $('tx-to-account');
+    if (txTo) txTo.value = existingTx ? (existingTx.toAccountId || '') : '';
+    const txCategory = $('tx-category');
+    if (txCategory) txCategory.value = existingTx ? (existingTx.categoryId || txCategory.value) : txCategory.value;
+    const txProject = $('tx-project');
+    if (txProject) txProject.value = existingTx ? (existingTx.projectId || '') : '';
     const txDate = $('tx-date');
-    if (txDate) txDate.value = MozeData.today();
+    if (txDate) txDate.value = existingTx ? (existingTx.date || MozeData.today()) : MozeData.today();
     const txTime = $('tx-time');
-    if (txTime) txTime.value = new Date().toTimeString().slice(0, 5);
+    if (txTime) txTime.value = existingTx ? (existingTx.time || '00:00') : new Date().toTimeString().slice(0, 5);
     const txAmount = $('tx-amount');
-    if (txAmount) txAmount.value = '';
+    if (txAmount) txAmount.value = existingTx ? String(existingTx.amount || '') : '';
     const txTitle = $('tx-title');
-    if (txTitle) txTitle.value = '';
+    if (txTitle) txTitle.value = existingTx ? (existingTx.title || '') : '';
     const txNote = $('tx-note');
-    if (txNote) txNote.value = '';
+    if (txNote) txNote.value = existingTx ? (existingTx.note || '') : '';
     const txTags = $('tx-tags');
-    if (txTags) txTags.value = '';
+    if (txTags) txTags.value = existingTx ? ((existingTx.tags || []).join(', ')) : '';
     const txFee = $('tx-fee');
-    if (txFee) txFee.value = '0';
+    if (txFee) txFee.value = existingTx ? String(existingTx.fee || 0) : '0';
   }
 
   function closeModal() {
     const overlay = $('tx-modal-overlay');
     if (overlay) overlay.classList.remove('open');
+    editingTxId = null;
+    const modalTitle = $('tx-modal-title');
+    if (modalTitle) modalTitle.textContent = '新增交易';
+    const saveBtn = $('btn-save-tx');
+    if (saveBtn) saveBtn.textContent = '儲存交易';
   }
 
   function updateModalType() {
@@ -1246,7 +1267,8 @@
       projectId: ($('tx-project') || {}).value || '',
     };
 
-    MozeData.addTransaction(tx);
+    if (editingTxId) MozeData.updateTransaction(editingTxId, tx);
+    else MozeData.addTransaction(tx);
     closeModal();
     refreshAll();
   }
