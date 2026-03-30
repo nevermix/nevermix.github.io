@@ -1,6 +1,6 @@
 {
-  "name": "吃土防禦術",
-  "short_name": "吃土防禦術",
+  "name": "accounting",
+  "short_name": "accounting",
   "description": "本地離線記帳應用，支援多帳戶、報表與預算管理",
   "start_url": "./index.html",
   "display": "standalone",

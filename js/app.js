@@ -1101,7 +1101,7 @@
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `moze-lite-backup-${MozeData.today()}.json`;
+      a.download = `accounting-backup-${MozeData.today()}.json`;
       a.click();
       URL.revokeObjectURL(url);
     });
