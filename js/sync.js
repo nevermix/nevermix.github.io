@@ -15,6 +15,8 @@ var MozeSync = (function () {
   var ERROR_LOG_BUFFER_KEY = 'moze-lite-error-log-buffer-v1';
   var ERROR_LOG_LIMIT = 50;
   var LAST_SYNCED_UID_KEY = 'moze-lite-last-synced-uid-v1';
+  var FEEDBACK_COOLDOWN_KEY = 'moze-lite-feedback-cooldown-v1';
+  var FEEDBACK_COOLDOWN_MS = 30000;
 
   var auth = null;
   var db = null;
@@ -124,6 +126,69 @@ var MozeSync = (function () {
       userAgent: userAgent,
       createdAt: (input && input.createdAt) ? input.createdAt : now,
     };
+  }
+
+  function detectBrowser(ua) {
+    if (/Edg\//.test(ua)) return 'Edge';
+    if (/Chrome\//.test(ua) && !/Edg\//.test(ua)) return 'Chrome';
+    if (/Safari\//.test(ua) && !/Chrome\//.test(ua)) return 'Safari';
+    if (/Firefox\//.test(ua)) return 'Firefox';
+    if (/SamsungBrowser\//.test(ua)) return 'Samsung Internet';
+    return 'Unknown';
+  }
+
+  function detectOs(ua, platform) {
+    if (/iPhone|iPad|iPod/.test(ua)) return 'iOS';
+    if (/Android/.test(ua)) return 'Android';
+    if (/Mac/.test(platform || '')) return 'macOS';
+    if (/Win/.test(platform || '')) return 'Windows';
+    if (/Linux/.test(platform || '')) return 'Linux';
+    return 'Unknown OS';
+  }
+
+  function buildDeviceLabel() {
+    var ua = window.navigator.userAgent || '';
+    var platform = window.navigator.platform || '';
+    var deviceType = /iPhone/.test(ua) ? 'iPhone'
+      : /iPad/.test(ua) ? 'iPad'
+      : /Android/.test(ua) && /Mobile/.test(ua) ? 'Android Phone'
+      : /Android/.test(ua) ? 'Android Tablet'
+      : /Mac/.test(platform) ? 'Mac'
+      : /Win/.test(platform) ? 'Windows PC'
+      : /Linux/.test(platform) ? 'Linux Device'
+      : 'Unknown Device';
+    return [deviceType, detectOs(ua, platform), detectBrowser(ua)].join(' / ');
+  }
+
+  function normalizeFeedback(input) {
+    var now = new Date().toISOString();
+    var user = auth && auth.currentUser ? auth.currentUser : null;
+    return {
+      message: truncateText(input && input.message ? String(input.message).trim() : '', 1000),
+      contact: truncateText(input && input.contact ? String(input.contact).trim() : '', 120),
+      createdAt: now,
+      pageUrl: truncateText(window.location.href, 300),
+      userAgent: truncateText(window.navigator.userAgent || '', 300),
+      device: truncateText(buildDeviceLabel(), 120),
+      authUid: user && user.uid ? truncateText(user.uid, 128) : '',
+      authEmail: user && user.email ? truncateText(String(user.email).toLowerCase(), 160) : '',
+    };
+  }
+
+  function getLastFeedbackSubmitAt() {
+    try {
+      return parseInt(localStorage.getItem(FEEDBACK_COOLDOWN_KEY) || '0', 10) || 0;
+    } catch (e) {
+      return 0;
+    }
+  }
+
+  function setLastFeedbackSubmitAt(ts) {
+    try {
+      localStorage.setItem(FEEDBACK_COOLDOWN_KEY, String(ts || 0));
+    } catch (e) {
+      console.warn('setLastFeedbackSubmitAt failed', e);
+    }
   }
 
   function writeErrorLog(entry) {
@@ -425,6 +490,67 @@ var MozeSync = (function () {
     });
   }
 
+  function submitFeedback(input) {
+    initFirebase();
+    if (!db) {
+      return Promise.reject(new Error('firebase-unavailable'));
+    }
+
+    var entry = normalizeFeedback(input || {});
+    if (!entry.message || entry.message.length < 3) {
+      return Promise.reject(new Error('feedback-too-short'));
+    }
+
+    var now = Date.now();
+    if (now - getLastFeedbackSubmitAt() < FEEDBACK_COOLDOWN_MS) {
+      return Promise.reject(new Error('feedback-cooldown'));
+    }
+
+    var ref = db.ref('feedbackInbox').push();
+    return ref.set(entry).then(function () {
+      setLastFeedbackSubmitAt(now);
+      return Object.assign({ id: ref.key }, entry);
+    }).catch(function (err) {
+      logError({
+        source: 'feedback',
+        message: 'Submit feedback failed',
+        stack: err && err.stack ? err.stack : '',
+        context: err && err.message ? err.message : '',
+      });
+      throw err;
+    });
+  }
+
+  function fetchFeedback(callback) {
+    if (!db || !auth || !auth.currentUser || !isAdmin(auth.currentUser)) {
+      callback(new Error('forbidden'), []);
+      return;
+    }
+    db.ref('feedbackInbox').once('value').then(function (snapshot) {
+      var data = snapshot.val() || {};
+      var items = Object.keys(data).map(function (id) {
+        var entry = data[id] || {};
+        return {
+          id: id,
+          message: truncateText(entry.message || '', 1000),
+          contact: truncateText(entry.contact || '', 120),
+          createdAt: truncateText(entry.createdAt || '', 40),
+          pageUrl: truncateText(entry.pageUrl || '', 300),
+          userAgent: truncateText(entry.userAgent || '', 300),
+          device: truncateText(entry.device || '', 120),
+          authUid: truncateText(entry.authUid || '', 128),
+          authEmail: truncateText(entry.authEmail || '', 160),
+        };
+      }).sort(function (a, b) {
+        return String(b.createdAt).localeCompare(String(a.createdAt));
+      });
+      callback(null, items);
+    }).catch(function (err) {
+      console.warn('fetchFeedback failed', err);
+      callback(err, []);
+    });
+  }
+
   function clearErrorLogs() {
     if (!db || !auth || !auth.currentUser || !isAdmin(auth.currentUser)) {
       return Promise.reject(new Error('forbidden'));
@@ -468,6 +594,8 @@ var MozeSync = (function () {
     stopSync: stopSync,
     setStatus: setStatus,
     fetchUserCount: fetchUserCount,
+    submitFeedback: submitFeedback,
+    fetchFeedback: fetchFeedback,
     fetchErrorLogs: fetchErrorLogs,
     clearErrorLogs: clearErrorLogs,
     logError: logError,

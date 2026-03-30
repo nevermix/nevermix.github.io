@@ -644,6 +644,76 @@ a { color: var(--accent2); text-decoration: none; }
 }
 .search-input-wrap input:focus { border-color: var(--accent); }
 
+/* ─── 意見反饋頁 ─── */
+.feedback-form-copy {
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-bottom: 14px;
+  line-height: 1.6;
+}
+
+.feedback-submit-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.feedback-status {
+  font-size: 12px;
+  color: var(--text-dim);
+  min-height: 18px;
+}
+
+.feedback-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.feedback-item {
+  background: var(--bg-input);
+  border: 1px solid rgba(255,255,255,.04);
+  border-radius: var(--radius-sm);
+  padding: 12px;
+}
+
+.feedback-item-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.feedback-item-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.feedback-item-time {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.feedback-item-message {
+  font-size: 14px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.feedback-item-meta {
+  margin-top: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
 /* ─── 報錯日誌頁 ─── */
 .error-log-toolbar {
   display: flex;
@@ -1080,6 +1150,7 @@ a { color: var(--accent2); text-decoration: none; }
   .form-row { grid-template-columns: 1fr; }
   .upcoming-form { grid-template-columns: 1fr; }
   .local-mode-warning { padding: 10px 14px; }
+  .feedback-submit-row { align-items: stretch; }
 }
 
 /* ─── PWA / 手機端強化 ─── */

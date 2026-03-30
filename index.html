@@ -43,6 +43,9 @@
       <div class="nav-item" data-view="search">
         <span class="nav-icon">🔍</span> 搜尋
       </div>
+      <div class="nav-item" data-view="feedback">
+        <span class="nav-icon">💬</span> 意見反饋
+      </div>
       <div class="nav-item" data-view="errorlogs" id="nav-errorlogs" style="display:none">
         <span class="nav-icon">🚨</span> 報錯日誌
       </div>
@@ -354,7 +357,41 @@
         <div id="search-results"></div>
       </div>
 
-      <!-- ⑦ 報錯日誌頁 -->
+      <!-- ⑦ 意見反饋頁 -->
+      <div class="view" id="view-feedback">
+        <div class="card">
+          <div class="card-title">意見反饋</div>
+          <div class="feedback-form-copy">送出後會附上目前頁面、裝置與瀏覽器資訊，方便排查問題。</div>
+          <div class="form-group">
+            <label for="feedback-message">問題或建議</label>
+            <textarea id="feedback-message" placeholder="例如：哪個功能不能用、操作到哪一步出錯、你希望新增什麼"></textarea>
+          </div>
+          <div class="form-group">
+            <label for="feedback-contact">聯絡方式（選填）</label>
+            <input type="text" id="feedback-contact" placeholder="Email / LINE / 稱呼">
+          </div>
+          <div class="feedback-submit-row">
+            <button class="btn btn-primary" id="btn-submit-feedback" type="button">送出反饋</button>
+            <div class="feedback-status" id="feedback-submit-status">未登入也可以送出。</div>
+          </div>
+        </div>
+        <div class="card" id="feedback-inbox-card" style="display:none">
+          <div class="card-title">反饋收件匣</div>
+          <div class="error-log-toolbar">
+            <div>
+              <div class="error-log-count-label">總筆數</div>
+              <div class="error-log-count" id="feedback-inbox-count">0</div>
+            </div>
+            <div class="error-log-actions">
+              <button class="btn btn-secondary btn-sm" id="btn-refresh-feedback" type="button">重新整理</button>
+            </div>
+          </div>
+          <div id="feedback-inbox-status" class="error-log-status">僅管理員帳號可查看此頁面。</div>
+          <div id="feedback-inbox-list" class="feedback-list"></div>
+        </div>
+      </div>
+
+      <!-- ⑧ 報錯日誌頁 -->
       <div class="view" id="view-errorlogs">
         <div class="card">
           <div class="card-title">報錯日誌</div>
@@ -373,7 +410,7 @@
         </div>
       </div>
 
-      <!-- ⑧ 設定頁 -->
+      <!-- ⑨ 設定頁 -->
       <div class="view" id="view-settings">
         <div class="settings-section">
           <h3>總負債金額</h3>
@@ -437,6 +474,9 @@
   </button>
   <button class="bnav-item" data-view="reports">
     <span class="bnav-icon">📈</span>報表
+  </button>
+  <button class="bnav-item" data-view="feedback">
+    <span class="bnav-icon">💬</span>反饋
   </button>
   <button class="bnav-item" data-view="settings">
     <span class="bnav-icon">⚙️</span>設定

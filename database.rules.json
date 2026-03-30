@@ -75,6 +75,13 @@
         }
       }
     },
+    "feedbackInbox": {
+      ".read": "auth != null && auth.token.email === 'kevin1542638@gmail.com'",
+      "$feedbackId": {
+        ".write": "(auth != null && auth.token.email === 'kevin1542638@gmail.com') || !data.exists()",
+        ".validate": "!newData.exists() || (newData.hasChildren(['message', 'createdAt', 'pageUrl', 'userAgent', 'device', 'contact', 'authUid', 'authEmail']) && newData.child('message').isString() && newData.child('message').val().length >= 3 && newData.child('message').val().length <= 1000 && newData.child('createdAt').isString() && newData.child('createdAt').val().length <= 40 && newData.child('pageUrl').isString() && newData.child('pageUrl').val().length <= 300 && newData.child('userAgent').isString() && newData.child('userAgent').val().length <= 300 && newData.child('device').isString() && newData.child('device').val().length <= 120 && newData.child('contact').isString() && newData.child('contact').val().length <= 120 && newData.child('authUid').isString() && newData.child('authUid').val().length <= 128 && newData.child('authEmail').isString() && newData.child('authEmail').val().length <= 160 && ((auth != null && newData.child('authUid').val() === auth.uid && newData.child('authEmail').val() === auth.token.email) || (auth == null && newData.child('authUid').val() === '' && newData.child('authEmail').val() === '')))"
+      }
+    },
     ".read": false,
     ".write": false
   }

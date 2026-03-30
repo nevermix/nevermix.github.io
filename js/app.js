@@ -87,6 +87,13 @@
     return d.toLocaleString('zh-TW');
   }
 
+  function formatFeedbackTime(isoText) {
+    if (!isoText) return '';
+    const d = new Date(isoText);
+    if (Number.isNaN(d.getTime())) return esc(isoText);
+    return d.toLocaleString('zh-TW');
+  }
+
   function recordClientError(payload) {
     if (typeof MozeSync !== 'undefined' && typeof MozeSync.logError === 'function') {
       MozeSync.logError(payload);
@@ -140,7 +147,7 @@
     if (target) target.classList.add('active');
     $$el('.sidebar-nav .nav-item').forEach(n => n.classList.toggle('active', n.dataset.view === name));
     $$el('.bottom-nav .bnav-item').forEach(n => n.classList.toggle('active', n.dataset.view === name));
-    const titles = { overview: '概覽', accounts: '帳戶', ledger: '流水帳', reports: '報表', projects: '專案', search: '搜尋', errorlogs: '報錯日誌', settings: '設定' };
+    const titles = { overview: '概覽', accounts: '帳戶', ledger: '流水帳', reports: '報表', projects: '專案', search: '搜尋', feedback: '意見反饋', errorlogs: '報錯日誌', settings: '設定' };
     const tt = $('topbar-title');
     if (tt) tt.textContent = titles[name] || name;
     refreshCurrentView();
@@ -168,6 +175,7 @@
       case 'reports': renderReports(); break;
       case 'projects': renderProjects(); break;
       case 'search': renderSearch(); break;
+      case 'feedback': renderFeedback(); break;
       case 'errorlogs': renderErrorLogs(); break;
       case 'settings': renderSettings(); break;
     }
@@ -650,6 +658,77 @@
     }
     results.innerHTML = txs.map(t => txItemHTML(t)).join('');
     bindTxDelete(results);
+  }
+
+  function renderFeedback() {
+    const statusEl = $('feedback-submit-status');
+    const inboxCard = $('feedback-inbox-card');
+    const countEl = $('feedback-inbox-count');
+    const inboxStatusEl = $('feedback-inbox-status');
+    const inboxListEl = $('feedback-inbox-list');
+    const isAdmin = typeof MozeSync !== 'undefined' && typeof MozeSync.isAdmin === 'function' && MozeSync.isAdmin(currentUser);
+
+    if (statusEl && !statusEl.dataset.locked) {
+      statusEl.textContent = currentUser
+        ? '送出後會連同登入帳號資訊一起附上。'
+        : '未登入也可以送出。';
+    }
+
+    if (!inboxCard || !countEl || !inboxStatusEl || !inboxListEl) return;
+    inboxCard.style.display = isAdmin ? '' : 'none';
+    if (!isAdmin) return;
+
+    inboxStatusEl.textContent = '讀取中…';
+    if (typeof MozeSync === 'undefined' || typeof MozeSync.fetchFeedback !== 'function') {
+      countEl.textContent = '0';
+      inboxStatusEl.textContent = '反饋模組未載入。';
+      inboxListEl.innerHTML = '<div class="empty-state"><p>無法讀取反饋內容。</p></div>';
+      return;
+    }
+
+    MozeSync.fetchFeedback(function (err, items) {
+      if (err) {
+        countEl.textContent = '0';
+        inboxStatusEl.textContent = '讀取失敗，請稍後再試。';
+        inboxListEl.innerHTML = '<div class="empty-state"><p>無法讀取反饋內容。</p></div>';
+        return;
+      }
+
+      countEl.textContent = items.length;
+      inboxStatusEl.textContent = items.length ? '只有管理員帳號可以查看這些反饋。' : '目前沒有收到反饋。';
+      if (!items.length) {
+        inboxListEl.innerHTML = '<div class="empty-state"><p>目前沒有收到反饋。</p></div>';
+        return;
+      }
+
+      inboxListEl.innerHTML = items.map(function (item) {
+        const meta = [];
+        if (item.contact) meta.push(`<span>聯絡：${esc(item.contact)}</span>`);
+        if (item.device) meta.push(`<span>裝置：${esc(item.device)}</span>`);
+        if (item.authEmail) meta.push(`<span>帳號：${esc(item.authEmail)}</span>`);
+        if (item.pageUrl) meta.push(`<span>頁面：${esc(item.pageUrl)}</span>`);
+        return `
+          <div class="feedback-item">
+            <div class="feedback-item-header">
+              <div class="feedback-item-title">問題回報</div>
+              <div class="feedback-item-time">${esc(formatFeedbackTime(item.createdAt))}</div>
+            </div>
+            <div class="feedback-item-message">${esc(item.message || '')}</div>
+            ${meta.length ? `<div class="feedback-item-meta">${meta.join('')}</div>` : ''}
+          </div>
+        `;
+      }).join('');
+    });
+  }
+
+  function resetFeedbackStatus() {
+    const statusEl = $('feedback-submit-status');
+    if (!statusEl) return;
+    delete statusEl.dataset.locked;
+    statusEl.style.color = 'var(--text-dim)';
+    statusEl.textContent = currentUser
+      ? '送出後會連同登入帳號資訊一起附上。'
+      : '未登入也可以送出。';
   }
 
   function renderErrorLogs() {
@@ -1187,6 +1266,74 @@
         });
       });
     }
+
+    const btnSubmitFeedback = $('btn-submit-feedback');
+    if (btnSubmitFeedback) {
+      btnSubmitFeedback.addEventListener('click', function () {
+        const messageEl = $('feedback-message');
+        const contactEl = $('feedback-contact');
+        const statusEl = $('feedback-submit-status');
+        const message = ((messageEl && messageEl.value) || '').trim();
+        const contact = ((contactEl && contactEl.value) || '').trim();
+
+        if (typeof MozeSync === 'undefined' || typeof MozeSync.submitFeedback !== 'function') {
+          if (statusEl) {
+            statusEl.textContent = '反饋模組未載入，請稍後再試。';
+            statusEl.style.color = 'var(--red)';
+            statusEl.dataset.locked = '1';
+          }
+          return;
+        }
+
+        if (!message || message.length < 3) {
+          if (statusEl) {
+            statusEl.textContent = '請至少輸入 3 個字描述問題或建議。';
+            statusEl.style.color = 'var(--red)';
+            statusEl.dataset.locked = '1';
+          }
+          return;
+        }
+
+        if (statusEl) {
+          statusEl.textContent = '送出中…';
+          statusEl.style.color = 'var(--text-dim)';
+          statusEl.dataset.locked = '1';
+        }
+        btnSubmitFeedback.disabled = true;
+
+        MozeSync.submitFeedback({ message, contact }).then(function () {
+          if (messageEl) messageEl.value = '';
+          if (contactEl) contactEl.value = '';
+          if (statusEl) {
+            statusEl.textContent = '已送出，謝謝你的回饋。';
+            statusEl.style.color = 'var(--green)';
+          }
+          if (typeof MozeSync !== 'undefined' && typeof MozeSync.isAdmin === 'function' && MozeSync.isAdmin(currentUser)) {
+            renderFeedback();
+          }
+        }).catch(function (err) {
+          if (!statusEl) return;
+          if (err && err.message === 'feedback-cooldown') {
+            statusEl.textContent = '送出太快，請 30 秒後再試。';
+          } else if (err && err.message === 'feedback-too-short') {
+            statusEl.textContent = '內容太短，請補充更多細節。';
+          } else {
+            statusEl.textContent = '送出失敗，請稍後再試。';
+          }
+          statusEl.style.color = 'var(--red)';
+        }).finally(function () {
+          btnSubmitFeedback.disabled = false;
+        });
+      });
+    }
+
+    const feedbackMessage = $('feedback-message');
+    if (feedbackMessage) feedbackMessage.addEventListener('input', resetFeedbackStatus);
+    const feedbackContact = $('feedback-contact');
+    if (feedbackContact) feedbackContact.addEventListener('input', resetFeedbackStatus);
+
+    const btnRefreshFeedback = $('btn-refresh-feedback');
+    if (btnRefreshFeedback) btnRefreshFeedback.addEventListener('click', renderFeedback);
 
     const btnRefreshErrorLogs = $('btn-refresh-errorlogs');
     if (btnRefreshErrorLogs) btnRefreshErrorLogs.addEventListener('click', renderErrorLogs);
