@@ -28,6 +28,17 @@
   let reportRange = 1;
   let currentUser = null;
   let globalErrorBound = false;
+  let selectedStockKey = '';
+  let stockQuotesCache = {};
+  let stockQuotesLoading = false;
+  let stockQuotesReady = false;
+  const HOT_STOCKS = [
+    { market: 'TWSE', symbol: '2330', name: '台積電' },
+    { market: 'TWSE', symbol: '0050', name: '元大台灣50' },
+    { market: 'TWSE', symbol: '0056', name: '元大高股息' },
+    { market: 'TWSE', symbol: '2317', name: '鴻海' },
+    { market: 'TWSE', symbol: '2412', name: '中華電' },
+  ];
 
   function openAuthModal() {
     const overlay = $('auth-modal-overlay');
@@ -85,6 +96,65 @@
     const d = new Date(isoText);
     if (Number.isNaN(d.getTime())) return esc(isoText);
     return d.toLocaleString('zh-TW');
+  }
+
+  function stockSymbolLabel(symbol, market) {
+    return `${symbol}${market === 'TPEx' ? ' .TWO' : ' .TW'}`;
+  }
+
+  function stockKey(symbol, market) {
+    return `${market === 'TPEx' ? 'TPEx' : 'TWSE'}:${String(symbol || '').toUpperCase()}`;
+  }
+
+  function parseStockQuotesMap(raw) {
+    const map = {};
+    Object.keys(raw || {}).forEach(market => {
+      const bucket = raw[market] || {};
+      Object.keys(bucket).forEach(symbol => {
+        const entry = bucket[symbol] || {};
+        const historyObj = entry.history || {};
+        const history = Object.keys(historyObj)
+          .sort((a, b) => a.localeCompare(b))
+          .map(date => ({
+            date,
+            close: parseFloat(historyObj[date] && historyObj[date].close) || 0,
+          }));
+        map[stockKey(symbol, market)] = {
+          symbol,
+          market: entry.market || market || 'TWSE',
+          name: entry.name || symbol,
+          latestClose: Number.isFinite(parseFloat(entry.latestClose)) ? parseFloat(entry.latestClose) : null,
+          latestDate: entry.latestDate || '',
+          updatedAt: entry.updatedAt || '',
+          history,
+        };
+      });
+    });
+    return map;
+  }
+
+  function loadStockQuotes(force) {
+    if (typeof MozeSync === 'undefined' || typeof MozeSync.fetchStockQuotes !== 'function') {
+      stockQuotesCache = {};
+      stockQuotesReady = false;
+      return Promise.resolve({});
+    }
+    if (!force && stockQuotesReady && Object.keys(stockQuotesCache).length) {
+      return Promise.resolve(stockQuotesCache);
+    }
+    if (stockQuotesLoading) return Promise.resolve(stockQuotesCache);
+
+    stockQuotesLoading = true;
+    return new Promise(function (resolve) {
+      MozeSync.fetchStockQuotes(function (err, data) {
+        stockQuotesLoading = false;
+        if (!err) {
+          stockQuotesCache = parseStockQuotesMap(data || {});
+          stockQuotesReady = true;
+        }
+        resolve(stockQuotesCache);
+      });
+    });
   }
 
   function getFeedbackStatusBaseText() {
@@ -358,7 +428,7 @@
     if (target) target.classList.add('active');
     $$el('.sidebar-nav .nav-item').forEach(n => n.classList.toggle('active', n.dataset.view === name));
     $$el('.bottom-nav .bnav-item').forEach(n => n.classList.toggle('active', n.dataset.view === name));
-    const titles = { overview: '概覽', accounts: '帳戶', ledger: '流水帳', reports: '報表', projects: '專案', search: '搜尋', feedback: '意見反饋', errorlogs: '開發者欄位', settings: '設定' };
+    const titles = { overview: '概覽', accounts: '帳戶', stocks: '股票', ledger: '流水帳', reports: '報表', projects: '專案', search: '搜尋', feedback: '意見反饋', errorlogs: '開發者欄位', settings: '設定' };
     const tt = $('topbar-title');
     if (tt) tt.textContent = titles[name] || name;
     refreshCurrentView();
@@ -382,6 +452,7 @@
     switch (currentView) {
       case 'overview': renderOverview(); break;
       case 'accounts': renderAccounts(); break;
+      case 'stocks': renderStocks(); break;
       case 'ledger': renderLedger(); break;
       case 'reports': renderReports(); break;
       case 'projects': renderProjects(); break;
@@ -537,6 +608,327 @@
     }
 
     renderAccountDetail();
+  }
+
+  function renderStocks() {
+    const shell = $('stocks-shell');
+    if (!shell) return;
+
+    const portfolio = MozeData.stockPortfolio(stockQuotesCache);
+    const holdings = portfolio.holdings;
+    const allPositions = portfolio.all;
+    const trades = MozeData.stockTradesList();
+    const coveredHoldings = holdings.filter(item => item.latestClose !== null);
+    const coveredMarketValue = coveredHoldings.length
+      ? coveredHoldings.reduce((sum, item) => sum + (item.marketValue || 0), 0)
+      : null;
+    const coveredUnrealized = coveredHoldings.length
+      ? coveredHoldings.reduce((sum, item) => sum + (item.unrealized || 0), 0)
+      : null;
+    const latestText = coveredHoldings.length
+      ? `已同步 ${coveredHoldings.length} 檔持股收盤價`
+      : '尚未收到持股收盤價';
+    const stockStatus = '收盤價使用公開官方 EOD 資料，雲端只保留最近 5 個交易日。盤中即時價目前未啟用。';
+    const invalidCount = allPositions.filter(item => item.invalid).length;
+    const hotStockCards = HOT_STOCKS.map(function (item) {
+      const quote = stockQuotesCache[stockKey(item.symbol, item.market)] || null;
+      const priceText = quote && quote.latestClose !== null ? MozeData.formatMoney(quote.latestClose) : '—';
+      const latestDate = quote && quote.latestDate ? quote.latestDate : '尚未同步';
+      const isSelected = selectedStockKey === stockKey(item.symbol, item.market);
+      return `
+        <button class="stocks-hot-item${isSelected ? ' active' : ''}" type="button" data-stock-key="${esc(stockKey(item.symbol, item.market))}">
+          <div class="stocks-hot-name">${esc(item.name)}</div>
+          <div class="stocks-hot-symbol">${esc(stockSymbolLabel(item.symbol, item.market))}</div>
+          <div class="stocks-hot-price">${esc(priceText)}</div>
+          <div class="stocks-hot-date">${esc(latestDate)}</div>
+        </button>
+      `;
+    }).join('');
+
+    if (!selectedStockKey || !allPositions.some(item => stockKey(item.symbol, item.market) === selectedStockKey)) {
+      selectedStockKey = holdings[0]
+        ? stockKey(holdings[0].symbol, holdings[0].market)
+        : (HOT_STOCKS[0] ? stockKey(HOT_STOCKS[0].symbol, HOT_STOCKS[0].market) : '');
+    }
+
+    const selectedPosition = allPositions.find(item => stockKey(item.symbol, item.market) === selectedStockKey) || null;
+    const selectedQuote = stockQuotesCache[selectedStockKey] || null;
+    const detailSource = selectedPosition || (selectedQuote ? {
+      ...selectedQuote,
+      shares: 0,
+      avgCost: 0,
+      marketValue: null,
+      unrealized: null,
+      realizedPnl: 0,
+    } : null);
+    const historyPoints = detailSource && detailSource.history && detailSource.history.length
+      ? detailSource.history.map(item => ({ date: item.date, label: item.date, value: item.close }))
+      : [];
+
+    shell.innerHTML = `
+      <div class="card">
+        <div class="stocks-card-head">
+          <div class="card-title">熱門股票收盤價</div>
+          <div class="stocks-caption">所有使用者共用同一份公開收盤價資料。</div>
+        </div>
+        <div class="stocks-hot-grid">${hotStockCards}</div>
+      </div>
+      <div class="stocks-summary-grid">
+        <div class="card">
+          <div class="card-title">持股成本</div>
+          <div class="card-value">${esc(MozeData.formatMoney(portfolio.totals.costBasis))}</div>
+          <div class="card-change">${esc(latestText)}</div>
+        </div>
+        <div class="card">
+          <div class="card-title">股票市值</div>
+          <div class="card-value ${coveredMarketValue !== null && coveredMarketValue >= portfolio.totals.costBasis ? 'positive' : 'negative'}">${coveredMarketValue !== null ? esc(MozeData.formatMoney(coveredMarketValue)) : '—'}</div>
+          <div class="card-change">以最近收盤價計算</div>
+        </div>
+        <div class="card">
+          <div class="card-title">未實現損益</div>
+          <div class="card-value ${coveredUnrealized !== null && coveredUnrealized >= 0 ? 'positive' : 'negative'}">${coveredUnrealized !== null ? esc(MozeData.formatMoney(coveredUnrealized)) : '—'}</div>
+          <div class="card-change">${esc(stockStatus)}</div>
+        </div>
+        <div class="card">
+          <div class="card-title">已實現損益</div>
+          <div class="card-value ${portfolio.realizedTotal >= 0 ? 'positive' : 'negative'}">${esc(MozeData.formatMoney(portfolio.realizedTotal))}</div>
+          <div class="card-change">${invalidCount ? `有 ${invalidCount} 筆賣出超過持股，請檢查交易順序` : '賣出後會計入已實現損益'}</div>
+        </div>
+      </div>
+      <div class="stocks-layout">
+        <div class="stocks-left">
+          <div class="card">
+            <div class="stocks-card-head">
+              <div class="card-title">持股總覽</div>
+              <button class="btn btn-secondary btn-sm" id="btn-refresh-stock-quotes" type="button">重新整理收盤價</button>
+            </div>
+            <div class="stocks-caption">免費版使用官方 EOD 收盤資料。收盤價由雲端每日排程更新。</div>
+            <div id="stocks-holdings-list">${renderStockHoldingsList(holdings)}</div>
+          </div>
+          <div class="card">
+            <div class="card-title">股票交易紀錄</div>
+            <div class="stocks-caption">買進會累加成本，賣出會依加權平均成本計算已實現損益。</div>
+            <div id="stock-trade-list">${renderStockTradeList(trades)}</div>
+          </div>
+        </div>
+        <div class="stocks-right">
+          <div class="card">
+            <div class="card-title">新增股票交易</div>
+            <div class="stocks-form-grid">
+              <div class="form-group">
+                <label>市場</label>
+                <select id="stock-trade-market">
+                  <option value="TWSE">上市 TWSE</option>
+                  <option value="TPEx">上櫃 TPEx</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>股票代號</label>
+                <input type="text" id="stock-trade-symbol" placeholder="2330 / 00679B">
+              </div>
+              <div class="form-group">
+                <label>股票名稱（選填）</label>
+                <input type="text" id="stock-trade-name" placeholder="台積電">
+              </div>
+              <div class="form-group">
+                <label>買賣方向</label>
+                <select id="stock-trade-side">
+                  <option value="buy">買進</option>
+                  <option value="sell">賣出</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>股數</label>
+                <input type="number" id="stock-trade-shares" placeholder="1000" step="0.0001">
+              </div>
+              <div class="form-group">
+                <label>成交價</label>
+                <input type="number" id="stock-trade-price" placeholder="950" step="0.0001">
+              </div>
+              <div class="form-group">
+                <label>手續費</label>
+                <input type="number" id="stock-trade-fee" placeholder="0" step="0.01" value="0">
+              </div>
+              <div class="form-group">
+                <label>交易日期</label>
+                <input type="date" id="stock-trade-date" value="${esc(MozeData.today())}">
+              </div>
+            </div>
+            <div class="form-group">
+              <label>備註</label>
+              <textarea id="stock-trade-note" placeholder="可選填，例如分批布局、停利原因"></textarea>
+            </div>
+            <button class="btn btn-primary btn-block" id="btn-add-stock-trade" type="button">新增股票交易</button>
+          </div>
+          <div class="card">
+            <div class="stocks-card-head">
+              <div>
+                <div class="card-title">持股明細</div>
+                <div class="stocks-caption">${detailSource ? `${esc(detailSource.name || detailSource.symbol)} / ${esc(stockSymbolLabel(detailSource.symbol, detailSource.market))}` : '尚未選擇股票'}</div>
+              </div>
+            </div>
+            ${renderSelectedStockDetail(detailSource)}
+            <div id="stock-history-chart" class="chart-container"></div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    const historyEl = $('stock-history-chart');
+    if (historyEl) {
+      if (historyPoints.length) {
+        MozeCharts.lineChart(historyEl, historyPoints, { color: '#ffd54f', height: 220 });
+      } else {
+        historyEl.innerHTML = '<div class="empty-state"><p>目前沒有可顯示的最近 5 日收盤價。</p></div>';
+      }
+    }
+
+    const refreshBtn = $('btn-refresh-stock-quotes');
+    if (refreshBtn) {
+      refreshBtn.disabled = !currentUser;
+      refreshBtn.addEventListener('click', function () {
+        if (!currentUser) return;
+        refreshBtn.disabled = true;
+        refreshBtn.textContent = '讀取中…';
+        loadStockQuotes(true).then(function () {
+          renderStocks();
+        });
+      });
+    }
+
+    $$el('[data-stock-key]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        selectedStockKey = btn.dataset.stockKey || '';
+        renderStocks();
+      });
+    });
+
+    $$el('[data-del-stock-trade]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        if (!window.confirm('確定要刪除這筆股票交易嗎？')) return;
+        MozeData.deleteStockTrade(btn.dataset.delStockTrade);
+        renderStocks();
+      });
+    });
+
+    const addTradeBtn = $('btn-add-stock-trade');
+    if (addTradeBtn) {
+      addTradeBtn.addEventListener('click', function () {
+        const market = ($('stock-trade-market') || {}).value || 'TWSE';
+        const symbol = String((($('stock-trade-symbol') || {}).value || '')).toUpperCase().replace(/\s+/g, '');
+        const name = (($('stock-trade-name') || {}).value || '').trim();
+        const side = (($('stock-trade-side') || {}).value || 'buy');
+        const shares = parseFloat((($('stock-trade-shares') || {}).value || '0'));
+        const price = parseFloat((($('stock-trade-price') || {}).value || '0'));
+        const fee = parseFloat((($('stock-trade-fee') || {}).value || '0'));
+        const date = (($('stock-trade-date') || {}).value || MozeData.today());
+        const note = (($('stock-trade-note') || {}).value || '').trim();
+
+        if (!symbol) { alert('請輸入股票代號'); return; }
+        if (!shares || shares <= 0) { alert('股數必須大於 0'); return; }
+        if (!Number.isFinite(price) || price < 0) { alert('成交價格式不正確'); return; }
+        if (!Number.isFinite(fee) || fee < 0) { alert('手續費格式不正確'); return; }
+        if (side === 'sell' && !MozeData.canSellStock(symbol, market, shares)) {
+          alert('賣出股數超過目前持股，請先確認股票交易紀錄。');
+          return;
+        }
+
+        MozeData.addStockTrade({ market, symbol, name, side, shares, price, fee, date, note });
+        selectedStockKey = stockKey(symbol, market);
+        renderStocks();
+      });
+    }
+
+    if (!stockQuotesReady && !stockQuotesLoading) {
+      loadStockQuotes(false).then(function () {
+        if (currentView === 'stocks') renderStocks();
+      });
+    }
+  }
+
+  function renderStockHoldingsList(holdings) {
+    if (!holdings.length) {
+      return '<div class="empty-state"><p>目前沒有持股。先新增一筆買進交易。</p></div>';
+    }
+    return `
+      <div class="stocks-holdings-list">
+        ${holdings.map(function (item) {
+          const activeClass = stockKey(item.symbol, item.market) === selectedStockKey ? ' active' : '';
+          const closeText = item.latestClose !== null ? MozeData.formatMoney(item.latestClose) : '—';
+          const mvText = item.marketValue !== null ? MozeData.formatMoney(item.marketValue) : '—';
+          const pnlText = item.unrealized !== null ? MozeData.formatMoney(item.unrealized) : '—';
+          const pnlClass = item.unrealized === null ? '' : (item.unrealized >= 0 ? 'positive' : 'negative');
+          return `
+            <button class="stocks-holding-item${activeClass}" type="button" data-stock-key="${esc(stockKey(item.symbol, item.market))}">
+              <div class="stocks-holding-main">
+                <div class="stocks-holding-title">${esc(item.name || item.symbol)} <span class="stocks-holding-code">${esc(stockSymbolLabel(item.symbol, item.market))}</span></div>
+                <div class="stocks-holding-meta">持股 ${esc(String(item.shares))} 股 · 均價 ${esc(MozeData.formatMoney(item.avgCost))}</div>
+              </div>
+              <div class="stocks-holding-side">
+                <div>收盤 ${esc(closeText)}</div>
+                <div>市值 ${esc(mvText)}</div>
+                <div class="${pnlClass}">損益 ${esc(pnlText)}</div>
+              </div>
+            </button>
+          `;
+        }).join('')}
+      </div>
+    `;
+  }
+
+  function renderStockTradeList(trades) {
+    if (!trades.length) {
+      return '<div class="empty-state"><p>還沒有任何股票交易。</p></div>';
+    }
+    return `
+      <div class="stocks-trade-list">
+        ${trades.map(function (trade) {
+          const directionClass = trade.side === 'buy' ? 'positive' : 'negative';
+          return `
+            <div class="stocks-trade-item">
+              <div class="stocks-trade-main">
+                <div class="stocks-trade-title">${trade.side === 'buy' ? '買進' : '賣出'} ${esc(trade.name || trade.symbol)} <span class="stocks-holding-code">${esc(stockSymbolLabel(trade.symbol, trade.market))}</span></div>
+                <div class="stocks-trade-meta">${esc(trade.date)} · ${esc(String(trade.shares))} 股 · 單價 ${esc(MozeData.formatMoney(trade.price))} · 手續費 ${esc(MozeData.formatMoney(trade.fee))}</div>
+                ${trade.note ? `<div class="stocks-trade-note">${esc(trade.note)}</div>` : ''}
+              </div>
+              <div class="stocks-trade-actions">
+                <div class="${directionClass}">${esc(MozeData.formatMoney(trade.shares * trade.price))}</div>
+                <button class="btn btn-secondary btn-sm" type="button" data-del-stock-trade="${esc(trade.id)}">刪除</button>
+              </div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    `;
+  }
+
+  function renderSelectedStockDetail(item) {
+    if (!item) {
+      return '<div class="empty-state"><p>選擇一檔股票後可查看收盤價與損益。</p></div>';
+    }
+    const latestClose = item.latestClose !== null ? MozeData.formatMoney(item.latestClose) : '—';
+    const marketValue = item.marketValue !== null ? MozeData.formatMoney(item.marketValue) : '—';
+    const unrealized = item.unrealized !== null ? MozeData.formatMoney(item.unrealized) : '—';
+    const unrealizedClass = item.unrealized === null ? '' : (item.unrealized >= 0 ? 'positive' : 'negative');
+    const historyText = item.latestDate ? `最新收盤日：${item.latestDate}` : '尚未同步到收盤價';
+    return `
+      <div class="stocks-detail-grid">
+        <div class="stocks-detail-metric"><span>持股</span><strong>${esc(String(item.shares))} 股</strong></div>
+        <div class="stocks-detail-metric"><span>均價</span><strong>${esc(MozeData.formatMoney(item.avgCost))}</strong></div>
+        <div class="stocks-detail-metric"><span>最新收盤</span><strong>${esc(latestClose)}</strong></div>
+        <div class="stocks-detail-metric"><span>市值</span><strong>${esc(marketValue)}</strong></div>
+        <div class="stocks-detail-metric"><span>未實現</span><strong class="${unrealizedClass}">${esc(unrealized)}</strong></div>
+        <div class="stocks-detail-metric"><span>已實現</span><strong class="${item.realizedPnl >= 0 ? 'positive' : 'negative'}">${esc(MozeData.formatMoney(item.realizedPnl))}</strong></div>
+      </div>
+      <div class="stocks-caption" style="margin-bottom:12px">${esc(historyText)}</div>
+      <div class="stocks-history-list">
+        ${(item.history && item.history.length)
+          ? item.history.slice().reverse().map(function (entry) {
+            return `<div class="stocks-history-row"><span>${esc(entry.date)}</span><strong>${esc(MozeData.formatMoney(entry.close))}</strong></div>`;
+          }).join('')
+          : '<div class="empty-state"><p>目前沒有最近 5 日收盤資料。</p></div>'}
+      </div>
+    `;
   }
 
   function renderAccountDetail() {
@@ -1686,6 +2078,9 @@
   /* ─── 登入 / 登出 UI ─── */
   function showApp(user) {
     currentUser = user || null;
+    stockQuotesCache = {};
+    stockQuotesLoading = false;
+    stockQuotesReady = false;
     const appLayout = $('app-layout');
     if (appLayout) appLayout.style.display = '';
 

@@ -966,6 +966,193 @@ a { color: var(--accent2); text-decoration: none; }
   margin-bottom: 12px;
 }
 
+/* ─── 股票頁 ─── */
+.stocks-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.stocks-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(320px, 0.85fr);
+  gap: 18px;
+}
+
+.stocks-hot-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.stocks-hot-item {
+  text-align: left;
+  border: 1px solid rgba(255,255,255,.06);
+  background: rgba(255,255,255,.02);
+  border-radius: 14px;
+  padding: 14px;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.stocks-hot-item.active {
+  border-color: rgba(243,193,75,.4);
+  background: rgba(243,193,75,.05);
+}
+
+.stocks-hot-name {
+  font-weight: 700;
+  color: var(--text);
+}
+
+.stocks-hot-symbol,
+.stocks-hot-date {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.stocks-hot-price {
+  margin-top: 12px;
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.stocks-left,
+.stocks-right {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.stocks-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.stocks-caption {
+  font-size: 12px;
+  color: var(--text-dim);
+  line-height: 1.55;
+}
+
+.stocks-holdings-list,
+.stocks-trade-list,
+.stocks-history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.stocks-holding-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(255,255,255,.06);
+  background: rgba(255,255,255,.02);
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+}
+
+.stocks-holding-item.active {
+  border-color: rgba(243,193,75,.4);
+  background: rgba(243,193,75,.05);
+  box-shadow: 0 0 0 1px rgba(243,193,75,.12) inset;
+}
+
+.stocks-holding-main,
+.stocks-trade-main {
+  min-width: 0;
+}
+
+.stocks-holding-title,
+.stocks-trade-title {
+  font-weight: 700;
+  color: var(--text);
+}
+
+.stocks-holding-code {
+  margin-left: 6px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.stocks-holding-meta,
+.stocks-trade-meta,
+.stocks-trade-note {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.stocks-holding-side,
+.stocks-trade-actions {
+  min-width: 140px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  text-align: right;
+  font-size: 12px;
+}
+
+.stocks-trade-item,
+.stocks-history-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.stocks-trade-item:last-child,
+.stocks-history-row:last-child {
+  border-bottom: none;
+}
+
+.stocks-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.stocks-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.stocks-detail-metric {
+  border: 1px solid var(--border-soft);
+  background: rgba(255,255,255,.02);
+  border-radius: 12px;
+  padding: 12px;
+}
+
+.stocks-detail-metric span {
+  display: block;
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+
+.stocks-detail-metric strong {
+  color: var(--text);
+  font-size: 16px;
+}
+
 /* ─── 意見反饋頁 ─── */
 .feedback-form-copy {
   font-size: 12px;
@@ -1483,6 +1670,9 @@ a { color: var(--accent2); text-decoration: none; }
   .accounts-layout.show-detail .accounts-mid { display: block; }
   .accounts-layout.show-detail .accounts-right { display: block; }
 
+  .stocks-hot-grid,
+  .stocks-summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .stocks-layout { grid-template-columns: 1fr; }
   .projects-layout { grid-template-columns: 1fr; }
   .report-grid { grid-template-columns: 1fr; }
   #rpt-cat-donut,
@@ -1512,6 +1702,23 @@ a { color: var(--accent2); text-decoration: none; }
   .accounts-layout.show-detail .accounts-mid { display: block; }
   .accounts-layout.show-detail .accounts-right { display: block; }
 
+  .stocks-hot-grid,
+  .stocks-summary-grid { grid-template-columns: 1fr; }
+  .stocks-layout { grid-template-columns: 1fr; }
+  .stocks-form-grid,
+  .stocks-detail-grid { grid-template-columns: 1fr; }
+  .stocks-holding-item,
+  .stocks-trade-item,
+  .stocks-history-row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .stocks-holding-side,
+  .stocks-trade-actions {
+    min-width: 0;
+    width: 100%;
+    text-align: left;
+  }
   .projects-layout { grid-template-columns: 1fr; }
 
   .report-grid { grid-template-columns: 1fr; }

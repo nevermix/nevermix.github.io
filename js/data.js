@@ -105,6 +105,7 @@ const MozeData = (() => {
       accounts: JSON.parse(JSON.stringify(DEFAULT_ACCOUNTS)),
       categories: JSON.parse(JSON.stringify(DEFAULT_CATEGORIES)),
       transactions: [],
+      stockTrades: [],
       projects: [],
       budgets: [],
       upcoming: [],
@@ -154,6 +155,20 @@ const MozeData = (() => {
           projectId: t.projectId || '',
         }));
       }
+      if (old.stockTrades) {
+        s.stockTrades = toArr(old.stockTrades).map(st => ({
+          id: st.id || uid(),
+          symbol: st.symbol || '',
+          market: st.market || 'TWSE',
+          name: st.name || '',
+          side: st.side || 'buy',
+          shares: st.shares || 0,
+          price: st.price || 0,
+          fee: st.fee || 0,
+          date: st.date || today(),
+          note: st.note || '',
+        }));
+      }
       s.activeAccountId = old.activeAccountId || s.accounts[0].id;
       s.selectedAccountId = s.activeAccountId;
       if (old.settings) s.settings = { ...s.settings, ...old.settings };
@@ -175,6 +190,7 @@ const MozeData = (() => {
     state.accounts     = toArr(state.accounts);
     state.categories   = toArr(state.categories);
     state.transactions = toArr(state.transactions);
+    state.stockTrades  = toArr(state.stockTrades);
     state.projects     = toArr(state.projects);
     state.budgets      = toArr(state.budgets);
     state.upcoming     = toArr(state.upcoming);
@@ -247,10 +263,24 @@ const MozeData = (() => {
       };
     });
 
+    state.stockTrades = state.stockTrades.map((t, idx) => ({
+      id: clampText(t && t.id, `stock-${uid()}-${idx}`, 100),
+      symbol: clampText((t && t.symbol ? String(t.symbol).toUpperCase().replace(/\s+/g, '') : ''), '', 20),
+      market: (t && (t.market === 'TWSE' || t.market === 'TPEx')) ? t.market : 'TWSE',
+      name: clampText(t && t.name, '', 80),
+      side: (t && (t.side === 'buy' || t.side === 'sell')) ? t.side : 'buy',
+      shares: toNumber(t && t.shares, 0),
+      price: toNumber(t && t.price, 0),
+      fee: toNumber(t && t.fee, 0),
+      date: clampText(t && t.date, today(), 10),
+      note: clampText(t && t.note, '', 500),
+    })).filter(t => t.symbol && t.shares > 0 && t.price >= 0);
+
     state = {
       accounts: state.accounts,
       categories: state.categories,
       transactions: state.transactions,
+      stockTrades: state.stockTrades,
       projects: state.projects,
       budgets: state.budgets,
       upcoming: state.upcoming,
@@ -421,6 +451,147 @@ const MozeData = (() => {
     t.projectId = tx.projectId || '';
     save();
     return t;
+  }
+
+  /* ─ 股票交易 CRUD ─ */
+  function addStockTrade(trade) {
+    const t = {
+      id: uid(),
+      symbol: String(trade.symbol || '').toUpperCase().replace(/\s+/g, ''),
+      market: trade.market === 'TPEx' ? 'TPEx' : 'TWSE',
+      name: trade.name || '',
+      side: trade.side === 'sell' ? 'sell' : 'buy',
+      shares: parseFloat(trade.shares) || 0,
+      price: parseFloat(trade.price) || 0,
+      fee: parseFloat(trade.fee) || 0,
+      date: trade.date || today(),
+      note: trade.note || '',
+    };
+    state.stockTrades.push(t);
+    save();
+    return t;
+  }
+
+  function deleteStockTrade(id) {
+    state.stockTrades = state.stockTrades.filter(x => x.id !== id);
+    save();
+  }
+
+  function stockTradesSorted() {
+    return [...state.stockTrades].sort((a, b) => {
+      const byDate = String(a.date || '').localeCompare(String(b.date || ''));
+      if (byDate !== 0) return byDate;
+      return String(a.id || '').localeCompare(String(b.id || ''));
+    });
+  }
+
+  function stockTradesList() {
+    return [...state.stockTrades].sort((a, b) => {
+      const byDate = String(b.date || '').localeCompare(String(a.date || ''));
+      if (byDate !== 0) return byDate;
+      return String(b.id || '').localeCompare(String(a.id || ''));
+    });
+  }
+
+  function canSellStock(symbol, market, shares) {
+    const normalizedSymbol = String(symbol || '').toUpperCase().replace(/\s+/g, '');
+    const qty = parseFloat(shares) || 0;
+    if (!normalizedSymbol || qty <= 0) return false;
+    const holding = stockPortfolio().holdings.find(h => h.symbol === normalizedSymbol && h.market === market);
+    return !!holding && holding.shares + 1e-8 >= qty;
+  }
+
+  function stockPortfolio(priceMap) {
+    const quotes = priceMap || {};
+    const positions = {};
+    let realizedTotal = 0;
+
+    stockTradesSorted().forEach(trade => {
+      const key = `${trade.market}:${trade.symbol}`;
+      if (!positions[key]) {
+        positions[key] = {
+          symbol: trade.symbol,
+          market: trade.market,
+          name: trade.name || trade.symbol,
+          shares: 0,
+          costBasis: 0,
+          avgCost: 0,
+          realizedPnl: 0,
+          totalFees: 0,
+          tradeCount: 0,
+          lastTradeDate: trade.date,
+        };
+      }
+      const pos = positions[key];
+      if (trade.name) pos.name = trade.name;
+      pos.totalFees += trade.fee;
+      pos.tradeCount += 1;
+      pos.lastTradeDate = trade.date;
+
+      if (trade.side === 'buy') {
+        pos.costBasis += trade.shares * trade.price + trade.fee;
+        pos.shares += trade.shares;
+        pos.avgCost = pos.shares > 0 ? pos.costBasis / pos.shares : 0;
+        return;
+      }
+
+      if (trade.shares > pos.shares + 1e-8) {
+        pos.invalid = true;
+        return;
+      }
+
+      const currentAvg = pos.shares > 0 ? pos.costBasis / pos.shares : 0;
+      const proceeds = trade.shares * trade.price - trade.fee;
+      const costRemoved = currentAvg * trade.shares;
+      const realized = proceeds - costRemoved;
+
+      pos.realizedPnl += realized;
+      realizedTotal += realized;
+      pos.shares -= trade.shares;
+      pos.costBasis -= costRemoved;
+      if (pos.shares <= 1e-8) {
+        pos.shares = 0;
+        pos.costBasis = 0;
+        pos.avgCost = 0;
+      } else {
+        pos.avgCost = pos.costBasis / pos.shares;
+      }
+    });
+
+    const all = Object.values(positions).map(pos => {
+      const quote = quotes[`${pos.market}:${pos.symbol}`] || {};
+      const latestClose = toNumber(quote.latestClose, NaN);
+      const hasQuote = Number.isFinite(latestClose);
+      const marketValue = hasQuote ? pos.shares * latestClose : 0;
+      const unrealized = hasQuote ? marketValue - pos.costBasis : 0;
+      return {
+        ...pos,
+        latestClose: hasQuote ? latestClose : null,
+        latestDate: quote.latestDate || '',
+        history: quote.history || [],
+        marketValue: hasQuote ? marketValue : null,
+        unrealized: hasQuote ? unrealized : null,
+        unrealizedPct: hasQuote && pos.costBasis > 0 ? unrealized / pos.costBasis : null,
+      };
+    });
+
+    const holdings = all
+      .filter(pos => pos.shares > 1e-8)
+      .sort((a, b) => (b.marketValue || 0) - (a.marketValue || 0) || a.symbol.localeCompare(b.symbol));
+
+    const totals = holdings.reduce((acc, pos) => {
+      acc.costBasis += pos.costBasis;
+      acc.marketValue += pos.marketValue || 0;
+      acc.unrealized += pos.unrealized || 0;
+      return acc;
+    }, { costBasis: 0, marketValue: 0, unrealized: 0 });
+
+    return {
+      holdings,
+      all,
+      realizedTotal,
+      totals,
+    };
   }
 
   function deleteTransaction(id) {
@@ -695,6 +866,7 @@ const MozeData = (() => {
       if (!state.projects) state.projects = [];
       if (!state.budgets) state.budgets = [];
       if (!state.upcoming) state.upcoming = [];
+      if (!state.stockTrades) state.stockTrades = [];
       if (!state.settings) state.settings = { liabilities: 0 };
       if (!state.selectedAccountId) state.selectedAccountId = state.activeAccountId;
       fixState();
@@ -728,7 +900,7 @@ const MozeData = (() => {
 
   function hasMeaningfulData() {
     if (!state) return false;
-    if (state.transactions.length || state.projects.length || state.budgets.length || state.upcoming.length) return true;
+    if (state.transactions.length || state.stockTrades.length || state.projects.length || state.budgets.length || state.upcoming.length) return true;
     if ((state.settings && parseFloat(state.settings.liabilities)) || 0) return true;
     if (JSON.stringify(state.accounts) !== JSON.stringify(DEFAULT_ACCOUNTS)) return true;
     if (JSON.stringify(state.categories) !== JSON.stringify(DEFAULT_CATEGORIES)) return true;
@@ -743,6 +915,7 @@ const MozeData = (() => {
     addCategory, updateCategory, deleteCategory, catName, catIcon,
     acctName, acctIcon,
     addTransaction, updateTransaction, deleteTransaction,
+    addStockTrade, deleteStockTrade, stockTradesList, stockPortfolio, canSellStock,
     addProject, deleteProject,
     setBudget, deleteBudget,
     addUpcoming, deleteUpcoming,

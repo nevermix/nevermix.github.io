@@ -556,6 +556,19 @@ var MozeSync = (function () {
     });
   }
 
+  function fetchStockQuotes(callback) {
+    if (!db) {
+      callback(new Error('firebase-unavailable'), {});
+      return;
+    }
+    db.ref('stockQuotesPublic').once('value').then(function (snapshot) {
+      callback(null, snapshot.val() || {});
+    }).catch(function (err) {
+      console.warn('fetchStockQuotes failed', err);
+      callback(err, {});
+    });
+  }
+
   function clearErrorLogs() {
     if (!db || !auth || !auth.currentUser || !isAdmin(auth.currentUser)) {
       return Promise.reject(new Error('forbidden'));
@@ -613,6 +626,7 @@ var MozeSync = (function () {
     fetchUserCount: fetchUserCount,
     submitFeedback: submitFeedback,
     fetchFeedback: fetchFeedback,
+    fetchStockQuotes: fetchStockQuotes,
     fetchErrorLogs: fetchErrorLogs,
     clearErrorLogs: clearErrorLogs,
     logError: logError,

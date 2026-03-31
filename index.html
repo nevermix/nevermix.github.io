@@ -40,6 +40,9 @@
       <div class="nav-item" data-view="projects">
         <span class="nav-icon">📁</span> 專案
       </div>
+      <div class="nav-item" data-view="stocks">
+        <span class="nav-icon">📉</span> 股票
+      </div>
       <div class="nav-item" data-view="search">
         <span class="nav-icon">🔍</span> 搜尋
       </div>
@@ -228,7 +231,12 @@
         <div id="ledger-list"></div>
       </div>
 
-      <!-- ④ 報表頁 -->
+      <!-- ④ 股票頁 -->
+      <div class="view" id="view-stocks">
+        <div id="stocks-shell"></div>
+      </div>
+
+      <!-- ⑤ 報表頁 -->
       <div class="view" id="view-reports">
         <div class="report-shortcuts" id="report-shortcuts">
           <button data-range="1" class="active">本月</button>
@@ -304,7 +312,7 @@
         </div>
       </div>
 
-      <!-- ⑤ 專案頁 -->
+      <!-- ⑥ 專案頁 -->
       <div class="view" id="view-projects">
         <div class="projects-layout">
           <div class="projects-left">
@@ -349,7 +357,7 @@
         </div>
       </div>
 
-      <!-- ⑥ 搜尋頁 -->
+      <!-- ⑦ 搜尋頁 -->
       <div class="view" id="view-search">
         <div class="card search-shell">
           <div class="search-shell-head">
@@ -373,7 +381,7 @@
         <div id="search-results"></div>
       </div>
 
-      <!-- ⑦ 意見反饋頁 -->
+      <!-- ⑧ 意見反饋頁 -->
       <div class="view" id="view-feedback">
         <div class="card">
           <div class="card-title">意見反饋</div>
@@ -393,7 +401,7 @@
         </div>
       </div>
 
-      <!-- ⑧ 報錯日誌頁 -->
+      <!-- ⑨ 報錯日誌頁 -->
       <div class="view" id="view-errorlogs">
         <div class="card">
           <div class="card-title">報錯日誌</div>
@@ -426,7 +434,7 @@
         </div>
       </div>
 
-      <!-- ⑨ 設定頁 -->
+      <!-- ⑩ 設定頁 -->
       <div class="view" id="view-settings">
         <div class="settings-section">
           <h3>總負債金額</h3>
@@ -493,6 +501,9 @@
   </button>
   <button class="bnav-item" data-view="projects">
     <span class="bnav-icon">📁</span>專案
+  </button>
+  <button class="bnav-item" data-view="stocks">
+    <span class="bnav-icon">📉</span>股票
   </button>
   <button class="bnav-item" data-view="search">
     <span class="bnav-icon">🔍</span>搜尋

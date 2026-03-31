@@ -3,3 +3,6 @@
 .DS_Store
 HANDOFF.md
 _headers
+node_modules
+tmp-stockquotes-seed.json
+tmp-stockquotes-public-seed.json
