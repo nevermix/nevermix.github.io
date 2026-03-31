@@ -6,3 +6,4 @@ _headers
 node_modules
 tmp-stockquotes-seed.json
 tmp-stockquotes-public-seed.json
+*-firebase-adminsdk-*.json
