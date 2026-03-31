@@ -12,6 +12,10 @@ const DEFAULT_CATEGORIES = [
   { id: 'cat-fun',     name: '娛樂', icon: '🎮' },
   { id: 'cat-med',     name: '醫療', icon: '🏥' },
   { id: 'cat-other',   name: '其他', icon: '📦' },
+  { id: 'cat-fee',     name: '手續費', icon: '💸' },
+  { id: 'cat-discount', name: '折扣', icon: '🪙' },
+  { id: 'cat-reward',  name: '紅利回饋', icon: '🎁' },
+  { id: 'cat-interest', name: '利息', icon: '💹' },
   { id: 'cat-salary',  name: '薪資', icon: '💰' },
 ];
 
@@ -96,6 +100,71 @@ function toNumber(value, fallback) {
   return Number.isFinite(num) ? num : fallback;
 }
 
+function toArrLoose(v) {
+  if (Array.isArray(v)) return v;
+  if (v && typeof v === 'object') return Object.values(v);
+  return [];
+}
+
+function normalizeInstallmentConfig(raw, fallbackTotalAmount) {
+  if (!raw || typeof raw !== 'object' || !raw.enabled) return null;
+  const totalAmount = Math.max(0, toNumber(raw.totalAmount, fallbackTotalAmount));
+  const periods = Math.max(1, Math.round(toNumber(raw.periods, 1)));
+  const interestType = ['none', 'fixed_total', 'fixed_each', 'annual_rate'].includes(raw.interestType) ? raw.interestType : 'none';
+  const interestValue = Math.max(0, toNumber(raw.interestValue, 0));
+  const rounding = ['round', 'last_adjust'].includes(raw.rounding) ? raw.rounding : 'last_adjust';
+  const firstPayment = Math.max(0, toNumber(raw.firstPayment, 0));
+  const gracePeriods = Math.max(0, Math.round(toNumber(raw.gracePeriods, 0)));
+  const bookingMode = ['immediate', 'per_period'].includes(raw.bookingMode) ? raw.bookingMode : 'immediate';
+  const rewardMode = ['each_period', 'first_period', 'none'].includes(raw.rewardMode) ? raw.rewardMode : 'each_period';
+  const totalWithInterest = interestType === 'fixed_total'
+    ? totalAmount + interestValue
+    : interestType === 'fixed_each'
+      ? totalAmount + (interestValue * periods)
+      : interestType === 'annual_rate'
+        ? totalAmount + (totalAmount * (interestValue / 100) * (periods / 12))
+        : totalAmount;
+  const remainingBase = Math.max(0, totalWithInterest - firstPayment);
+  const perPeriodAmount = periods <= 0 ? remainingBase : remainingBase / periods;
+  return {
+    enabled: true,
+    totalAmount,
+    periods,
+    interestType,
+    interestValue,
+    rounding,
+    firstPayment,
+    gracePeriods,
+    bookingMode,
+    rewardMode,
+    perPeriodAmount,
+  };
+}
+
+function normalizeTxItems(rawItems, fallbackCategoryId, fallbackTitle, fallbackAmount, fallbackTags) {
+  const baseTags = Array.isArray(fallbackTags) ? fallbackTags : [];
+  const source = Array.isArray(rawItems) && rawItems.length
+    ? rawItems
+    : [{
+        id: uid(),
+        categoryId: fallbackCategoryId,
+        title: fallbackTitle,
+        amount: fallbackAmount,
+        tags: baseTags,
+      }];
+
+  return source.map((item, idx) => {
+    const rawTags = Array.isArray(item && item.tags) ? item.tags : (item && item.tags ? toArrLoose(item.tags) : []);
+    return {
+      id: clampText(item && item.id, `txi-${uid()}-${idx}`, 100),
+      categoryId: clampText(item && item.categoryId, fallbackCategoryId, 100),
+      title: clampText(item && item.title, fallbackTitle || '', 120),
+      amount: Math.max(0, toNumber(item && item.amount, idx === 0 ? fallbackAmount : 0)),
+      tags: rawTags.map(tag => clampText(tag, '', 40)).filter(Boolean),
+    };
+  }).filter(item => item.amount > 0 || item.title || item.categoryId);
+}
+
 /* ───── MozeData 單例 ───── */
 const MozeData = (() => {
   let state = null;
@@ -109,6 +178,11 @@ const MozeData = (() => {
       projects: [],
       budgets: [],
       upcoming: [],
+      libraries: {
+        merchants: [],
+        counterparts: [],
+        titleTemplates: [],
+      },
       settings: { liabilities: 0 },
       activeAccountId: 'acc-cash',
       selectedAccountId: 'acc-cash',
@@ -172,6 +246,7 @@ const MozeData = (() => {
       s.activeAccountId = old.activeAccountId || s.accounts[0].id;
       s.selectedAccountId = s.activeAccountId;
       if (old.settings) s.settings = { ...s.settings, ...old.settings };
+      if (old.libraries) s.libraries = { ...s.libraries, ...old.libraries };
       return s;
     } catch (e) {
       console.error('v1 migration failed', e);
@@ -194,6 +269,7 @@ const MozeData = (() => {
     state.projects     = toArr(state.projects);
     state.budgets      = toArr(state.budgets);
     state.upcoming     = toArr(state.upcoming);
+    if (!state.libraries || typeof state.libraries !== 'object') state.libraries = { merchants: [], counterparts: [], titleTemplates: [] };
     if (!state.accounts.length)
       state.accounts = JSON.parse(JSON.stringify(DEFAULT_ACCOUNTS));
     if (!state.categories.length)
@@ -214,6 +290,12 @@ const MozeData = (() => {
       name: clampText(c && c.name, '未分類', 80),
       icon: clampText(c && c.icon, '📦', 16),
     }));
+
+    DEFAULT_CATEGORIES.forEach(defaultCat => {
+      if (!state.categories.some(cat => cat.id === defaultCat.id)) {
+        state.categories.push({ ...defaultCat });
+      }
+    });
 
     state.projects = state.projects.map((p, idx) => ({
       id: clampText(p && p.id, `proj-${uid()}-${idx}`, 100),
@@ -239,6 +321,24 @@ const MozeData = (() => {
       nextDate: clampText(u && u.nextDate, today(), 10),
     }));
 
+    function normalizeLibraryEntries(list, prefix) {
+      return toArr(list).map((entry, idx) => {
+        if (typeof entry === 'string') {
+          return { id: `${prefix}-${uid()}-${idx}`, name: clampText(entry, '', 80) };
+        }
+        return {
+          id: clampText(entry && entry.id, `${prefix}-${uid()}-${idx}`, 100),
+          name: clampText(entry && entry.name, '', 80),
+        };
+      }).filter(entry => entry.name);
+    }
+
+    state.libraries = {
+      merchants: normalizeLibraryEntries(state.libraries.merchants, 'merchant'),
+      counterparts: normalizeLibraryEntries(state.libraries.counterparts, 'counterpart'),
+      titleTemplates: normalizeLibraryEntries(state.libraries.titleTemplates, 'template'),
+    };
+
     if (!state.activeAccountId)   state.activeAccountId = state.accounts[0].id;
     if (!state.selectedAccountId) state.selectedAccountId = state.activeAccountId;
     state.activeAccountId = clampText(state.activeAccountId, state.accounts[0].id, 100);
@@ -246,19 +346,32 @@ const MozeData = (() => {
 
     state.transactions = state.transactions.map((t, idx) => {
       const rawTags = Array.isArray(t && t.tags) ? t.tags : (t && t.tags ? toArr(t.tags) : []);
+      const type = (t && (t.type === 'expense' || t.type === 'income' || t.type === 'transfer')) ? t.type : 'expense';
+      const defaultCategoryId = clampText(t && t.categoryId, state.categories[0].id, 100);
+      const items = type === 'transfer'
+        ? []
+        : normalizeTxItems(t && t.items, defaultCategoryId, t && t.title, toNumber(t && t.amount, 0), rawTags);
+      const totalAmount = type === 'transfer'
+        ? toNumber(t && t.amount, 0)
+        : items.reduce((sum, item) => sum + item.amount, 0);
+      const primaryItem = items[0] || { categoryId: defaultCategoryId, title: '' };
       return {
         id: clampText(t && t.id, `tx-${uid()}-${idx}`, 100),
-        type: (t && (t.type === 'expense' || t.type === 'income' || t.type === 'transfer')) ? t.type : 'expense',
-        amount: toNumber(t && t.amount, 0),
+        type,
+        amount: totalAmount,
         fee: toNumber(t && t.fee, 0),
         accountId: clampText(t && t.accountId, state.activeAccountId, 100),
         toAccountId: clampText(t && t.toAccountId, '', 100),
-        categoryId: clampText(t && t.categoryId, state.categories[0].id, 100),
+        categoryId: primaryItem.categoryId || defaultCategoryId,
         date: clampText(t && t.date, today(), 10),
         time: clampText(t && t.time, '00:00', 5),
-        title: clampText(t && t.title, '', 120),
+        title: clampText(t && t.title, primaryItem.title || '', 120),
+        merchant: clampText(t && t.merchant, '', 120),
+        counterpart: clampText(t && t.counterpart, '', 120),
         note: clampText(t && t.note, '', 500),
         tags: rawTags.map(tag => clampText(tag, '', 40)).filter(Boolean),
+        items,
+        installment: normalizeInstallmentConfig(t && t.installment, totalAmount),
         projectId: clampText(t && t.projectId, '', 100),
       };
     });
@@ -284,6 +397,7 @@ const MozeData = (() => {
       projects: state.projects,
       budgets: state.budgets,
       upcoming: state.upcoming,
+      libraries: state.libraries,
       settings: { liabilities: toNumber(state.settings && state.settings.liabilities, 0) },
       activeAccountId: state.activeAccountId,
       selectedAccountId: state.selectedAccountId,
@@ -385,7 +499,7 @@ const MozeData = (() => {
   }
 
   function deleteCategory(id) {
-    const used = state.transactions.some(t => t.categoryId === id);
+    const used = state.transactions.some(t => (t.categoryId === id) || (Array.isArray(t.items) && t.items.some(item => item.categoryId === id)));
     if (used) return false;
     state.categories = state.categories.filter(x => x.id !== id);
     save();
@@ -412,21 +526,64 @@ const MozeData = (() => {
     return a ? a.icon : '💵';
   }
 
+  function transactionItems(tx) {
+    if (!tx || tx.type === 'transfer') return [];
+    const items = normalizeTxItems(tx.items, tx.categoryId || state.categories[0].id, tx.title || '', tx.amount || 0, tx.tags || []);
+    return items.map(item => ({
+      ...item,
+      txId: tx.id,
+      type: tx.type,
+      accountId: tx.accountId,
+      toAccountId: tx.toAccountId,
+      projectId: tx.projectId || '',
+      date: tx.date,
+      time: tx.time || '00:00',
+      note: tx.note || '',
+      txTags: Array.isArray(tx.tags) ? tx.tags : [],
+    }));
+  }
+
+  function txPrimaryItem(tx) {
+    return transactionItems(tx)[0] || null;
+  }
+
+  function txTotalAmount(tx) {
+    if (!tx) return 0;
+    if (tx.type === 'transfer') return toNumber(tx.amount, 0);
+    return transactionItems(tx).reduce((sum, item) => sum + item.amount, 0);
+  }
+
+  function txItemsInRange(startDate, endDate, accId) {
+    return txInRange(startDate, endDate, accId).flatMap(transactionItems);
+  }
+
   /* ─ 交易 CRUD ─ */
   function addTransaction(tx) {
+    const type = tx.type || 'expense';
+    const items = type === 'transfer'
+      ? []
+      : normalizeTxItems(tx.items, tx.categoryId || state.categories[0].id, tx.title || '', parseFloat(tx.amount) || 0, tx.tags || []);
+    const totalAmount = type === 'transfer'
+      ? parseFloat(tx.amount) || 0
+      : items.reduce((sum, item) => sum + item.amount, 0);
+    const primaryItem = items[0] || { categoryId: tx.categoryId || state.categories[0].id, title: tx.title || '' };
     const t = {
       id: uid(),
-      type: tx.type || 'expense',
-      amount: parseFloat(tx.amount) || 0,
+      type,
+      amount: totalAmount,
       fee: parseFloat(tx.fee) || 0,
       accountId: tx.accountId || state.activeAccountId,
       toAccountId: tx.toAccountId || '',
-      categoryId: tx.categoryId || state.categories[0].id,
+      categoryId: primaryItem.categoryId || state.categories[0].id,
       date: tx.date || today(),
       time: tx.time || nowTime(),
-      title: tx.title || '',
+      title: tx.title || primaryItem.title || '',
+      merchant: tx.merchant || '',
+      counterpart: tx.counterpart || '',
       note: tx.note || '',
       tags: tx.tags || [],
+      items,
+      installment: normalizeInstallmentConfig(tx.installment, totalAmount),
       projectId: tx.projectId || '',
     };
     state.transactions.push(t);
@@ -437,17 +594,29 @@ const MozeData = (() => {
   function updateTransaction(id, tx) {
     const t = state.transactions.find(x => x.id === id);
     if (!t) return null;
-    t.type = tx.type || 'expense';
-    t.amount = parseFloat(tx.amount) || 0;
+    const type = tx.type || 'expense';
+    const items = type === 'transfer'
+      ? []
+      : normalizeTxItems(tx.items, tx.categoryId || state.categories[0].id, tx.title || '', parseFloat(tx.amount) || 0, tx.tags || []);
+    const totalAmount = type === 'transfer'
+      ? parseFloat(tx.amount) || 0
+      : items.reduce((sum, item) => sum + item.amount, 0);
+    const primaryItem = items[0] || { categoryId: tx.categoryId || state.categories[0].id, title: tx.title || '' };
+    t.type = type;
+    t.amount = totalAmount;
     t.fee = parseFloat(tx.fee) || 0;
     t.accountId = tx.accountId || state.activeAccountId;
     t.toAccountId = tx.toAccountId || '';
-    t.categoryId = tx.categoryId || state.categories[0].id;
+    t.categoryId = primaryItem.categoryId || state.categories[0].id;
     t.date = tx.date || today();
     t.time = tx.time || nowTime();
-    t.title = tx.title || '';
+    t.title = tx.title || primaryItem.title || '';
+    t.merchant = tx.merchant || '';
+    t.counterpart = tx.counterpart || '';
     t.note = tx.note || '';
     t.tags = Array.isArray(tx.tags) ? tx.tags : [];
+    t.items = items;
+    t.installment = normalizeInstallmentConfig(tx.installment, totalAmount);
     t.projectId = tx.projectId || '';
     save();
     return t;
@@ -699,7 +868,7 @@ const MozeData = (() => {
     let income = 0, expense = 0, fee = 0, count = 0;
     txs.forEach(t => {
       if (t.type === 'income')  income += t.amount;
-      if (t.type === 'expense') { expense += t.amount; fee += t.fee; count++; }
+      if (t.type === 'expense') { expense += t.amount; fee += t.fee; count += Math.max(1, transactionItems(t).length); }
       if (t.type === 'transfer') fee += t.fee;
     });
     const days = Math.max(1, Math.round((new Date(endDate) - new Date(startDate)) / 86400000) + 1);
@@ -710,8 +879,10 @@ const MozeData = (() => {
     const txs = txInRange(startDate, endDate, accId).filter(t => t.type === 'expense');
     const map = {};
     txs.forEach(t => {
-      if (!map[t.categoryId]) map[t.categoryId] = 0;
-      map[t.categoryId] += t.amount;
+      transactionItems(t).forEach(item => {
+        if (!map[item.categoryId]) map[item.categoryId] = 0;
+        map[item.categoryId] += item.amount;
+      });
     });
     const total = Object.values(map).reduce((a, b) => a + b, 0) || 1;
     return Object.entries(map)
@@ -835,10 +1006,16 @@ const MozeData = (() => {
     const q = query.toLowerCase();
     return state.transactions.filter(t => {
       if (t.title && t.title.toLowerCase().includes(q)) return true;
+      if (t.merchant && t.merchant.toLowerCase().includes(q)) return true;
+      if (t.counterpart && t.counterpart.toLowerCase().includes(q)) return true;
       if (t.note && t.note.toLowerCase().includes(q)) return true;
       if (t.tags && t.tags.some(tag => tag.toLowerCase().includes(q))) return true;
-      const cn = catName(t.categoryId);
-      if (cn.toLowerCase().includes(q)) return true;
+      if (transactionItems(t).some(item => {
+        if (item.title && item.title.toLowerCase().includes(q)) return true;
+        if (item.tags && item.tags.some(tag => tag.toLowerCase().includes(q))) return true;
+        const cn = catName(item.categoryId);
+        return cn.toLowerCase().includes(q);
+      })) return true;
       return false;
     }).sort((a, b) => b.date.localeCompare(a.date));
   }
@@ -855,18 +1032,25 @@ const MozeData = (() => {
 
   /* ─ 匯出 / 匯入 ─ */
   function exportJSON() {
-    return JSON.stringify(state, null, 2);
+    return JSON.stringify({
+      app: 'accounting',
+      schemaVersion: 4,
+      exportedAt: new Date().toISOString(),
+      data: state,
+    }, null, 2);
   }
 
   function importJSON(json) {
     try {
       const imported = JSON.parse(json);
-      if (!imported.accounts || !imported.transactions) throw new Error('invalid');
-      state = imported;
+      const payload = imported && imported.data ? imported.data : imported;
+      if (!payload.accounts || !payload.transactions) throw new Error('invalid');
+      state = payload;
       if (!state.projects) state.projects = [];
       if (!state.budgets) state.budgets = [];
       if (!state.upcoming) state.upcoming = [];
       if (!state.stockTrades) state.stockTrades = [];
+      if (!state.libraries) state.libraries = { merchants: [], counterparts: [], titleTemplates: [] };
       if (!state.settings) state.settings = { liabilities: 0 };
       if (!state.selectedAccountId) state.selectedAccountId = state.activeAccountId;
       fixState();
@@ -893,6 +1077,29 @@ const MozeData = (() => {
     save();
   }
 
+  function libraryList(kind) {
+    return toArr(state.libraries && state.libraries[kind]).slice().sort((a, b) => a.name.localeCompare(b.name, 'zh-Hant'));
+  }
+
+  function addLibraryEntry(kind, name) {
+    const bucket = state.libraries && state.libraries[kind];
+    const normalized = String(name || '').trim();
+    if (!bucket || !normalized) return null;
+    const existing = bucket.find(entry => entry.name === normalized);
+    if (existing) return existing;
+    const item = { id: uid(), name: normalized };
+    bucket.push(item);
+    save();
+    return item;
+  }
+
+  function deleteLibraryEntry(kind, id) {
+    const bucket = state.libraries && state.libraries[kind];
+    if (!bucket) return;
+    state.libraries[kind] = bucket.filter(entry => entry.id !== id);
+    save();
+  }
+
   function resetLocalData() {
     state = blank();
     save();
@@ -902,6 +1109,7 @@ const MozeData = (() => {
     if (!state) return false;
     if (state.transactions.length || state.stockTrades.length || state.projects.length || state.budgets.length || state.upcoming.length) return true;
     if ((state.settings && parseFloat(state.settings.liabilities)) || 0) return true;
+    if (state.libraries && (state.libraries.merchants.length || state.libraries.counterparts.length || state.libraries.titleTemplates.length)) return true;
     if (JSON.stringify(state.accounts) !== JSON.stringify(DEFAULT_ACCOUNTS)) return true;
     if (JSON.stringify(state.categories) !== JSON.stringify(DEFAULT_CATEGORIES)) return true;
     return false;
@@ -915,6 +1123,7 @@ const MozeData = (() => {
     addCategory, updateCategory, deleteCategory, catName, catIcon,
     acctName, acctIcon,
     addTransaction, updateTransaction, deleteTransaction,
+    transactionItems, txItemsInRange, txPrimaryItem, txTotalAmount,
     addStockTrade, deleteStockTrade, stockTradesList, stockPortfolio, canSellStock,
     addProject, deleteProject,
     setBudget, deleteBudget,
@@ -925,6 +1134,7 @@ const MozeData = (() => {
     txByDateGroups, searchTx, datesWithTx,
     exportJSON, importJSON,
     setActiveAccount, setSelectedAccount, setLiabilities,
+    libraryList, addLibraryEntry, deleteLibraryEntry,
     resetLocalData,
     hasMeaningfulData,
     formatMoney, monthKey, addMonths, parseMonth, monthRange, daysInMonth, today, uid,

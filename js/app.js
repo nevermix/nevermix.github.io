@@ -32,6 +32,9 @@
   let stockQuotesCache = {};
   let stockQuotesLoading = false;
   let stockQuotesReady = false;
+  let datePickerTarget = null;
+  let datePickerMonth = '';
+  let currentMorePane = 'general';
   const HOT_STOCKS = [
     { market: 'TWSE', symbol: '2330', name: '台積電' },
     { market: 'TWSE', symbol: '0050', name: '元大台灣50' },
@@ -106,6 +109,26 @@
     return `${market === 'TPEx' ? 'TPEx' : 'TWSE'}:${String(symbol || '').toUpperCase()}`;
   }
 
+  function pad2(value) {
+    return String(value).padStart(2, '0');
+  }
+
+  function isoFromDate(date) {
+    return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
+  }
+
+  function parseIsoDate(value) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(value || ''))) return null;
+    const date = new Date(`${value}T00:00:00`);
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+
+  function monthLabel(monthValue) {
+    const date = parseIsoDate(`${monthValue}-01`);
+    if (!date) return monthValue;
+    return `${date.getFullYear()} / ${pad2(date.getMonth() + 1)}`;
+  }
+
   function parseStockQuotesMap(raw) {
     const map = {};
     Object.keys(raw || {}).forEach(market => {
@@ -155,6 +178,86 @@
         resolve(stockQuotesCache);
       });
     });
+  }
+
+  function closeDatePicker() {
+    datePickerTarget = null;
+    const overlay = $('date-picker-overlay');
+    if (overlay) {
+      overlay.classList.remove('open');
+      overlay.setAttribute('aria-hidden', 'true');
+    }
+  }
+
+  function setDateInputValue(input, value) {
+    if (!input) return;
+    input.value = value;
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+
+  function renderDatePicker() {
+    const titleEl = $('date-picker-title');
+    const gridEl = $('date-picker-grid');
+    if (!datePickerTarget || !titleEl || !gridEl) return;
+
+    const baseDate = parseIsoDate(`${datePickerMonth}-01`) || new Date(`${MozeData.monthKey(MozeData.today())}-01T00:00:00`);
+    const year = baseDate.getFullYear();
+    const month = baseDate.getMonth();
+    const firstDay = new Date(year, month, 1);
+    const leading = firstDay.getDay();
+    const days = new Date(year, month + 1, 0).getDate();
+    const prevDays = new Date(year, month, 0).getDate();
+    const selectedValue = datePickerTarget.value || '';
+    const todayValue = MozeData.today();
+
+    titleEl.textContent = monthLabel(`${year}-${pad2(month + 1)}`);
+    gridEl.innerHTML = '';
+
+    for (let i = 0; i < 42; i += 1) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'date-picker-day';
+
+      let dateValue = '';
+      if (i < leading) {
+        const day = prevDays - leading + i + 1;
+        btn.classList.add('muted');
+        dateValue = isoFromDate(new Date(year, month - 1, day));
+        btn.textContent = String(day);
+      } else if (i < leading + days) {
+        const day = i - leading + 1;
+        dateValue = isoFromDate(new Date(year, month, day));
+        btn.textContent = String(day);
+      } else {
+        const day = i - leading - days + 1;
+        btn.classList.add('muted');
+        dateValue = isoFromDate(new Date(year, month + 1, day));
+        btn.textContent = String(day);
+      }
+
+      if (dateValue === todayValue) btn.classList.add('today');
+      if (dateValue === selectedValue) btn.classList.add('selected');
+
+      btn.addEventListener('click', function () {
+        if (!datePickerTarget) return;
+        setDateInputValue(datePickerTarget, dateValue);
+        closeDatePicker();
+      });
+      gridEl.appendChild(btn);
+    }
+  }
+
+  function openDatePicker(input) {
+    if (!input) return;
+    datePickerTarget = input;
+    datePickerMonth = MozeData.monthKey(input.value || MozeData.today());
+    const overlay = $('date-picker-overlay');
+    if (overlay) {
+      overlay.classList.add('open');
+      overlay.setAttribute('aria-hidden', 'false');
+    }
+    renderDatePicker();
   }
 
   function getFeedbackStatusBaseText() {
@@ -291,22 +394,31 @@
     const accountId = parsed.account ? parsed.account.id : 'all';
 
     let txs = MozeData.txInRange(parsed.range.start, parsed.range.end, accountId);
-    if (parsed.category) txs = txs.filter(t => t.categoryId === parsed.category.id);
+    let items = MozeData.txItemsInRange(parsed.range.start, parsed.range.end, accountId);
+    if (parsed.category) {
+      items = items.filter(t => t.categoryId === parsed.category.id);
+      const matchedIds = new Set(items.map(item => item.txId));
+      txs = txs.filter(t => matchedIds.has(t.id));
+    }
 
     let labelType = '交易';
     if (parsed.intent === 'count') {
       if (/收入|賺|進帳/.test(normalizedQuery)) {
         txs = txs.filter(t => t.type === 'income');
+        items = items.filter(t => t.type === 'income');
         labelType = '收入';
       } else if (/花|支出|花費/.test(normalizedQuery)) {
         txs = txs.filter(t => t.type === 'expense');
+        items = items.filter(t => t.type === 'expense');
         labelType = '支出';
       }
     } else if (parsed.intent === 'income') {
       txs = txs.filter(t => t.type === 'income');
+      items = items.filter(t => t.type === 'income');
       labelType = '收入';
     } else {
       txs = txs.filter(t => t.type === 'expense');
+      items = items.filter(t => t.type === 'expense');
       labelType = '支出';
     }
 
@@ -331,16 +443,16 @@
 
     if (parsed.intent === 'count') {
       return {
-        text: `${parsed.range.label}${targetLabel}共有 ${txs.length} 筆`,
+        text: `${parsed.range.label}${targetLabel}共有 ${items.length} 筆`,
         meta,
         txs,
       };
     }
 
-    const total = txs.reduce((sum, tx) => sum + (parseFloat(tx.amount) || 0), 0);
+    const total = items.reduce((sum, tx) => sum + (parseFloat(tx.amount) || 0), 0);
     return {
       text: `${parsed.range.label}${targetLabel}${labelType}共 ${MozeData.formatMoney(total)}`,
-      meta: `${meta}｜共 ${txs.length} 筆`,
+      meta: `${meta}｜共 ${items.length} 筆`,
       txs,
     };
   }
@@ -428,10 +540,20 @@
     if (target) target.classList.add('active');
     $$el('.sidebar-nav .nav-item').forEach(n => n.classList.toggle('active', n.dataset.view === name));
     $$el('.bottom-nav .bnav-item').forEach(n => n.classList.toggle('active', n.dataset.view === name));
-    const titles = { overview: '概覽', accounts: '帳戶', stocks: '股票', ledger: '流水帳', reports: '報表', projects: '專案', search: '搜尋', feedback: '意見反饋', errorlogs: '開發者欄位', settings: '設定' };
+    const titles = { overview: '概覽', accounts: '帳戶', stocks: '股票', ledger: '流水帳', reports: '報表', projects: '專案', search: '搜尋', feedback: '意見反饋', errorlogs: '開發者欄位', settings: '更多功能' };
     const tt = $('topbar-title');
     if (tt) tt.textContent = titles[name] || name;
     refreshCurrentView();
+  }
+
+  function switchMorePane(name) {
+    currentMorePane = name || 'general';
+    $$el('.more-nav-item').forEach(function (btn) {
+      btn.classList.toggle('active', btn.dataset.morePaneNav === currentMorePane);
+    });
+    $$el('.more-pane').forEach(function (pane) {
+      pane.classList.toggle('active', pane.dataset.morePane === currentMorePane);
+    });
   }
 
   /* ─── 刷新所有 ─── */
@@ -751,7 +873,7 @@
               </div>
               <div class="form-group">
                 <label>交易日期</label>
-                <input type="date" id="stock-trade-date" value="${esc(MozeData.today())}">
+                <input type="text" id="stock-trade-date" class="date-text-input" data-date-picker readonly inputmode="none" placeholder="YYYY-MM-DD" value="${esc(MozeData.today())}">
               </div>
             </div>
             <div class="form-group">
@@ -1206,8 +1328,11 @@
         const mStart = `${curMonth}-01`;
         const mEnd = `${curMonth}-${String(MozeData.daysInMonth(y, m)).padStart(2, '0')}`;
         budgetList.innerHTML = budgets.map(b => {
-          const spent = txs.filter(t => t.type === 'expense' && t.categoryId === b.categoryId && t.date >= mStart && t.date <= mEnd)
-            .reduce((s, t) => s + t.amount, 0);
+          const spent = txs
+            .filter(t => t.type === 'expense' && t.date >= mStart && t.date <= mEnd)
+            .flatMap(t => MozeData.transactionItems(t))
+            .filter(item => item.categoryId === b.categoryId)
+            .reduce((s, item) => s + item.amount, 0);
           const pct = Math.min(100, (spent / (b.limitMonthly || 1)) * 100);
           const over = spent > b.limitMonthly;
           return `<div class="budget-row">
@@ -1435,8 +1560,51 @@
   /* ═══════════════════════════════════════ */
   const ADMIN_EMAIL = 'kevin1542638@gmail.com';
 
+  function renderLibraryList(elementId, kind) {
+    const el = $(elementId);
+    if (!el) return;
+    const items = MozeData.libraryList(kind);
+    if (!items.length) {
+      el.innerHTML = '<div class="empty-state"><p>目前沒有資料</p></div>';
+      return;
+    }
+    el.innerHTML = items.map(function (item) {
+      return `<div class="settings-list-row">
+        <span>${esc(item.name)}</span>
+        <button class="btn-icon" data-del-library="${esc(kind)}:${esc(item.id)}" title="刪除">✕</button>
+      </div>`;
+    }).join('');
+    el.querySelectorAll('[data-del-library]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        const [bucket, id] = btn.dataset.delLibrary.split(':');
+        MozeData.deleteLibraryEntry(bucket, id);
+        renderSettings();
+        renderModalLibraryLists();
+      });
+    });
+  }
+
+  function renderModalLibraryLists() {
+    const merchantList = $('tx-merchants');
+    const counterpartList = $('tx-counterparts');
+    const templateList = $('tx-title-templates');
+    if (merchantList) {
+      merchantList.innerHTML = MozeData.libraryList('merchants').map(item => `<option value="${esc(item.name)}"></option>`).join('');
+    }
+    if (counterpartList) {
+      counterpartList.innerHTML = MozeData.libraryList('counterparts').map(item => `<option value="${esc(item.name)}"></option>`).join('');
+    }
+    if (templateList) {
+      templateList.innerHTML = MozeData.libraryList('titleTemplates').map(item => `<option value="${esc(item.name)}"></option>`).join('');
+    }
+    $$el('#tx-items-list .tx-item-title').forEach(function (input) {
+      input.setAttribute('list', 'tx-title-templates');
+    });
+  }
+
   function renderSettings() {
     const s = MozeData.getState();
+    switchMorePane(currentMorePane);
     const liabInput = $('settings-liabilities');
     if (liabInput) liabInput.value = s.settings.liabilities || 0;
 
@@ -1456,6 +1624,26 @@
           renderSettings();
         });
       });
+    }
+
+    renderLibraryList('settings-merchant-list', 'merchants');
+    renderLibraryList('settings-counterpart-list', 'counterparts');
+    renderLibraryList('settings-template-list', 'titleTemplates');
+    renderModalLibraryLists();
+
+    const groupList = $('more-account-group-list');
+    if (groupList) {
+      const counts = {};
+      (s.accounts || []).forEach(function (acc) {
+        const key = acc.group || '其他';
+        counts[key] = (counts[key] || 0) + 1;
+      });
+      const groups = Object.keys(counts).sort(function (a, b) { return a.localeCompare(b, 'zh-Hant'); });
+      groupList.innerHTML = groups.length
+        ? groups.map(function (group) {
+            return `<div class="settings-list-row"><span>${esc(group)}</span><span class="settings-help-text">${counts[group]} 個帳戶</span></div>`;
+          }).join('')
+        : '<div class="empty-state"><p>目前沒有帳戶分組</p></div>';
     }
 
     const adminPanel = $('admin-panel');
@@ -1485,8 +1673,10 @@
   /*           交易項目 HTML                  */
   /* ═══════════════════════════════════════ */
   function txItemHTML(t) {
-    let icon = esc(MozeData.catIcon(t.categoryId));
-    let titleText = esc(t.title || MozeData.catName(t.categoryId));
+    const items = MozeData.transactionItems(t);
+    const primaryItem = MozeData.txPrimaryItem(t);
+    let icon = esc(primaryItem ? MozeData.catIcon(primaryItem.categoryId) : MozeData.catIcon(t.categoryId));
+    let titleText = esc(t.title || (primaryItem ? (primaryItem.title || MozeData.catName(primaryItem.categoryId)) : MozeData.catName(t.categoryId)));
     let amountClass = t.type;
     let amountPrefix = t.type === 'income' ? '+' : (t.type === 'expense' ? '-' : '');
     let extra = '';
@@ -1496,9 +1686,15 @@
       titleText = esc(t.title) || `${esc(MozeData.acctName(t.accountId))} → ${esc(MozeData.acctName(t.toAccountId))}`;
       amountPrefix = '';
       if (t.fee > 0) extra = ` <span style="font-size:11px;color:var(--text-muted)">(手續費 ${MozeData.formatMoney(t.fee)})</span>`;
+    } else if (items.length > 1) {
+      titleText = `${titleText} <span style="font-size:11px;color:var(--text-muted)">+${items.length - 1} 項</span>`;
     }
 
     const tagsHtml = (t.tags || []).map(tag => `<span class="tx-tag">${esc(tag)}</span>`).join('');
+    const itemPreview = t.type === 'transfer' ? '' : `<span>${esc(items.slice(0, 3).map(function (item) {
+      const label = item.title || MozeData.catName(item.categoryId);
+      return `${label} ${MozeData.formatMoney(item.amount)}`;
+    }).join(' / '))}${items.length > 3 ? ' ...' : ''}</span>`;
 
     return `<div class="tx-item">
       <div class="tx-icon">${icon}</div>
@@ -1508,6 +1704,7 @@
           <span>${esc(t.date)} ${esc(t.time || '')}</span>
           ${t.note ? `<span>${esc(t.note)}</span>` : ''}
           <span>${esc(MozeData.acctName(t.accountId))}</span>
+          ${itemPreview}
           ${tagsHtml}
         </div>
       </div>
@@ -1575,17 +1772,385 @@
   /*           彈窗邏輯                       */
   /* ═══════════════════════════════════════ */
   let txType = 'expense';
+  let txMode = 'expense';
   let editingTxId = null;
+  let txAdvancedMode = 'single';
+  let txAdvancedDraftMode = 'single';
+  let txInstallmentDraft = null;
+  let activeTxItemRowId = '';
+
+  const TX_MODE_META = {
+    expense: { label: '支出', baseType: 'expense', tag: '' },
+    income: { label: '收入', baseType: 'income', tag: '' },
+    transfer: { label: '轉帳', baseType: 'transfer', tag: '' },
+    receivable: { label: '應收款項', baseType: 'income', tag: '應收款項' },
+    payable: { label: '應付款項', baseType: 'expense', tag: '應付款項' },
+    system: { label: '系統', baseType: 'expense', tag: '系統' },
+  };
+
+  const ADVANCED_MODE_META = {
+    single: { label: '單次', summary: '立即入帳' },
+    recurring: { label: '週期', summary: '週期草稿' },
+    installment: { label: '分期', summary: '分期草稿' },
+  };
+
+  function defaultInstallmentDraft(totalAmount) {
+    return {
+      enabled: true,
+      totalAmount: Math.max(0, parseFloat(totalAmount) || 0),
+      periods: 3,
+      interestType: 'none',
+      interestValue: 0,
+      rounding: 'last_adjust',
+      firstPayment: 0,
+      gracePeriods: 0,
+      bookingMode: 'immediate',
+      rewardMode: 'each_period',
+    };
+  }
+
+  function currentModalNormalAmount() {
+    return collectModalItems().reduce(function (sum, item) {
+      return sum + (parseFloat(item.amount) || 0);
+    }, 0);
+  }
+
+  function installmentPreview(config) {
+    const draft = config || defaultInstallmentDraft(0);
+    const totalAmount = Math.max(0, parseFloat(draft.totalAmount) || 0);
+    const periods = Math.max(1, Math.round(parseFloat(draft.periods) || 1));
+    const interestValue = Math.max(0, parseFloat(draft.interestValue) || 0);
+    const firstPayment = Math.max(0, parseFloat(draft.firstPayment) || 0);
+    let totalWithInterest = totalAmount;
+    if (draft.interestType === 'fixed_total') totalWithInterest += interestValue;
+    else if (draft.interestType === 'fixed_each') totalWithInterest += interestValue * periods;
+    else if (draft.interestType === 'annual_rate') totalWithInterest += totalAmount * (interestValue / 100) * (periods / 12);
+    const remaining = Math.max(0, totalWithInterest - firstPayment);
+    const rawPerPeriod = periods > 0 ? (remaining / periods) : remaining;
+    const perPeriodAmount = draft.rounding === 'round'
+      ? Math.round(rawPerPeriod)
+      : Math.round(rawPerPeriod * 100) / 100;
+    return {
+      totalAmount,
+      periods,
+      interestType: draft.interestType,
+      interestValue,
+      firstPayment,
+      gracePeriods: Math.max(0, Math.round(parseFloat(draft.gracePeriods) || 0)),
+      bookingMode: draft.bookingMode || 'immediate',
+      rewardMode: draft.rewardMode || 'each_period',
+      rounding: draft.rounding || 'last_adjust',
+      totalWithInterest,
+      perPeriodAmount,
+    };
+  }
+
+  function readInstallmentDraftFromFields() {
+    return installmentPreview({
+      enabled: true,
+      totalAmount: (($('tx-installment-total') || {}).value || 0),
+      periods: (($('tx-installment-periods') || {}).value || 1),
+      interestType: (($('tx-installment-interest-type') || {}).value || 'none'),
+      interestValue: (($('tx-installment-interest-value') || {}).value || 0),
+      rounding: (($('tx-installment-rounding') || {}).value || 'last_adjust'),
+      firstPayment: (($('tx-installment-first-payment') || {}).value || 0),
+      gracePeriods: (($('tx-installment-grace-periods') || {}).value || 0),
+      bookingMode: (($('tx-installment-booking-mode') || {}).value || 'immediate'),
+      rewardMode: (($('tx-installment-reward-mode') || {}).value || 'each_period'),
+    });
+  }
+
+  function renderInstallmentDraft() {
+    const draft = installmentPreview(txInstallmentDraft || defaultInstallmentDraft(currentModalNormalAmount()));
+    txInstallmentDraft = draft;
+    const panel = $('tx-advanced-installment-panel');
+    if (panel) panel.style.display = txAdvancedDraftMode === 'installment' ? 'block' : 'none';
+    const total = $('tx-installment-total');
+    if (total) total.value = draft.totalAmount ? String(draft.totalAmount) : '';
+    const periods = $('tx-installment-periods');
+    if (periods) periods.value = String(draft.periods);
+    const interestType = $('tx-installment-interest-type');
+    if (interestType) interestType.value = draft.interestType;
+    const interestValue = $('tx-installment-interest-value');
+    if (interestValue) interestValue.value = String(draft.interestValue || 0);
+    const rounding = $('tx-installment-rounding');
+    if (rounding) rounding.value = draft.rounding;
+    const firstPayment = $('tx-installment-first-payment');
+    if (firstPayment) firstPayment.value = String(draft.firstPayment || 0);
+    const bookingMode = $('tx-installment-booking-mode');
+    if (bookingMode) bookingMode.value = draft.bookingMode;
+    const gracePeriods = $('tx-installment-grace-periods');
+    if (gracePeriods) gracePeriods.value = String(draft.gracePeriods || 0);
+    const rewardMode = $('tx-installment-reward-mode');
+    if (rewardMode) rewardMode.value = draft.rewardMode;
+    const perPeriod = $('tx-installment-per-period');
+    if (perPeriod) perPeriod.value = MozeData.formatMoney(draft.perPeriodAmount || 0);
+  }
+
+  function baseTypeForMode(mode) {
+    return (TX_MODE_META[mode] || TX_MODE_META.expense).baseType;
+  }
+
+  function modeFromTx(tx) {
+    if (!tx) return 'expense';
+    if (tx.type === 'transfer') return 'transfer';
+    const tags = Array.isArray(tx.tags) ? tx.tags : [];
+    if (tags.includes('應收款項')) return 'receivable';
+    if (tags.includes('應付款項')) return 'payable';
+    if (tags.includes('系統')) return 'system';
+    return tx.type === 'income' ? 'income' : 'expense';
+  }
+
+  function advancedModeFromTx(tx) {
+    if (tx && tx.installment && tx.installment.enabled) return 'installment';
+    const tags = Array.isArray(tx && tx.tags) ? tx.tags : [];
+    if (tags.includes('分期草稿')) return 'installment';
+    if (tags.includes('週期草稿')) return 'recurring';
+    return 'single';
+  }
+
+  function modalHintText(mode) {
+    if (mode === 'transfer') return '第一階段保留既有轉帳模型。';
+    if (mode === 'receivable') return '第一階段先以一般收入交易寫入，並加上「應收款項」標籤。';
+    if (mode === 'payable') return '第一階段先以一般支出交易寫入，並加上「應付款項」標籤。';
+    if (mode === 'system') return '第一階段先以一般支出交易寫入，並加上「系統」標籤。';
+    return '';
+  }
+
+  function modalCategoriesForMode(mode) {
+    const categories = (MozeData.getState().categories || []).slice();
+    const expensePreferred = ['cat-food', 'cat-trans', 'cat-shop', 'cat-bill', 'cat-fun', 'cat-med', 'cat-other'];
+    const incomePreferred = ['cat-salary', 'cat-reward', 'cat-interest', 'cat-other'];
+    const systemPreferred = ['cat-fee', 'cat-discount', 'cat-reward', 'cat-interest', 'cat-other'];
+    const payablePreferred = ['cat-bill', 'cat-med', 'cat-shop', 'cat-other'];
+    function pick(ids) {
+      return categories
+        .filter(function (cat) { return ids.includes(cat.id); })
+        .sort(function (a, b) { return ids.indexOf(a.id) - ids.indexOf(b.id); });
+    }
+
+    if (mode === 'transfer') return [];
+    if (mode === 'income' || mode === 'receivable') return pick(incomePreferred);
+    if (mode === 'system') return pick(systemPreferred);
+    if (mode === 'payable') return pick(payablePreferred);
+    if (mode === 'expense') return pick(expensePreferred);
+    return pick(expensePreferred);
+  }
+
+  function ensureModalCategorySelection() {
+    const select = $('tx-category');
+    const pool = modalCategoriesForMode(txMode);
+    if (!select || !pool.length) return;
+    const activeRow = activeTxItemRow();
+    const targetCategoryId = activeRow
+      ? ((activeRow.querySelector('.tx-item-category') || {}).value || '')
+      : select.value;
+    if (pool.some(function (cat) { return cat.id === targetCategoryId; })) {
+      select.value = targetCategoryId;
+      return;
+    }
+    select.value = pool[0].id;
+  }
+
+  function renderModalCategoryPills() {
+    const wrap = $('tx-category-pills');
+    const select = $('tx-category');
+    if (!wrap || !select) return;
+    const pool = modalCategoriesForMode(txMode);
+    if (!pool.length) {
+      wrap.innerHTML = '<div class="tx-phase-note">此模式目前不使用分類。</div>';
+      return;
+    }
+    ensureModalCategorySelection();
+    wrap.innerHTML = pool.map(function (cat) {
+      const active = cat.id === select.value ? ' active' : '';
+      return `<button class="tx-category-pill${active}" type="button" data-tx-category="${esc(cat.id)}">
+        <span class="tx-category-pill-icon">${esc(cat.icon)}</span>
+        <span class="tx-category-pill-label">${esc(cat.name)}</span>
+      </button>`;
+    }).join('');
+  }
+
+  function syncAdvancedSummary() {
+    const trigger = $('btn-open-advanced-settings');
+    const summary = $('tx-advanced-summary-text');
+    const meta = ADVANCED_MODE_META[txAdvancedMode] || ADVANCED_MODE_META.single;
+    if (trigger) {
+      if (txAdvancedMode === 'installment') {
+        const preview = installmentPreview(txInstallmentDraft || defaultInstallmentDraft(currentModalNormalAmount()));
+        trigger.textContent = `分期｜${preview.periods} 期`;
+      } else {
+        trigger.textContent = meta.label;
+      }
+    }
+    if (summary) {
+      if (txAdvancedMode === 'installment') {
+        const preview = installmentPreview(txInstallmentDraft || defaultInstallmentDraft(currentModalNormalAmount()));
+        summary.textContent = `${preview.bookingMode === 'per_period' ? '按期入帳' : '立即入帳'}｜每期 ${MozeData.formatMoney(preview.perPeriodAmount)}`;
+      } else {
+        summary.textContent = meta.summary;
+      }
+    }
+  }
+
+  function renderAdvancedTabs() {
+    $$el('#tx-advanced-tabs .type-tab').forEach(function (btn) {
+      btn.classList.toggle('active', btn.dataset.advancedMode === txAdvancedDraftMode);
+    });
+    const note = $('tx-advanced-note');
+    renderInstallmentDraft();
+    if (!note) return;
+    if (txAdvancedDraftMode === 'single') note.textContent = '目前模式會立即入帳。';
+    else if (txAdvancedDraftMode === 'recurring') note.textContent = '第一階段先完成 UI。週期事件第二階段才會自動生成。';
+    else note.textContent = '第一階段會儲存分期母單與設定，不會先自動生成各期交易。';
+  }
+
+  function openAdvancedModal() {
+    if (!txInstallmentDraft) {
+      txInstallmentDraft = defaultInstallmentDraft(currentModalNormalAmount());
+    }
+    txAdvancedDraftMode = txAdvancedMode;
+    const overlay = $('tx-advanced-overlay');
+    if (overlay) overlay.classList.add('open');
+    renderAdvancedTabs();
+  }
+
+  function closeAdvancedModal() {
+    const overlay = $('tx-advanced-overlay');
+    if (overlay) overlay.classList.remove('open');
+  }
+
+  function syncMirroredModalFields() {
+    const date = $('tx-date');
+    const dateTransfer = $('tx-date-transfer');
+    const time = $('tx-time');
+    const timeTransfer = $('tx-time-transfer');
+    const note = $('tx-note');
+    const noteTransfer = $('tx-note-transfer');
+    if (date && dateTransfer) dateTransfer.value = date.value;
+    if (time && timeTransfer) timeTransfer.value = time.value;
+    if (note && noteTransfer) noteTransfer.value = note.value;
+  }
+
+  function syncBackFromTransferFields() {
+    const date = $('tx-date');
+    const dateTransfer = $('tx-date-transfer');
+    const time = $('tx-time');
+    const timeTransfer = $('tx-time-transfer');
+    const note = $('tx-note');
+    const noteTransfer = $('tx-note-transfer');
+    if (date && dateTransfer) date.value = dateTransfer.value;
+    if (time && timeTransfer) time.value = timeTransfer.value;
+    if (note && noteTransfer) note.value = noteTransfer.value;
+  }
+
+  function setModalMode(mode) {
+    txMode = TX_MODE_META[mode] ? mode : 'expense';
+    txType = baseTypeForMode(txMode);
+    updateModalType();
+  }
+
+  function blankModalItem(categoryId) {
+    return {
+      id: MozeData.uid(),
+      categoryId: categoryId || (($('tx-category') || {}).value || (MozeData.getState().categories[0] || {}).id || ''),
+      title: '',
+      amount: '',
+    };
+  }
+
+  function activeTxItemRow() {
+    if (!activeTxItemRowId) return null;
+    return $el(`[data-tx-item-row="${activeTxItemRowId}"]`);
+  }
+
+  function setActiveTxItemRow(id) {
+    activeTxItemRowId = id || '';
+    $$el('#tx-items-list .tx-item-row').forEach(function (row) {
+      row.classList.toggle('active', row.dataset.txItemRow === activeTxItemRowId);
+    });
+    renderModalCategoryPills();
+  }
+
+  function syncModalItemsSummary() {
+    const totalEl = $('tx-items-total');
+    if (!totalEl) return;
+    const total = collectModalItems().reduce(function (sum, item) {
+      return sum + (parseFloat(item.amount) || 0);
+    }, 0);
+    totalEl.textContent = `合計 ${MozeData.formatMoney(total)}`;
+  }
+
+  function modalItemOptions(selectedId) {
+    const pool = modalCategoriesForMode(txMode);
+    return pool.map(function (cat) {
+      return `<option value="${esc(cat.id)}"${cat.id === selectedId ? ' selected' : ''}>${esc(cat.icon)} ${esc(cat.name)}</option>`;
+    }).join('');
+  }
+
+  function renderModalItemRows(items) {
+    const list = $('tx-items-list');
+    if (!list) return;
+    const categoryPool = modalCategoriesForMode(txMode);
+    const fallbackCategoryId = (($('tx-category') || {}).value || (categoryPool[0] || {}).id || (MozeData.getState().categories[0] || {}).id || '');
+    const rows = (items && items.length ? items : [blankModalItem()]).map(function (item) {
+      const categoryId = categoryPool.some(function (cat) { return cat.id === item.categoryId; })
+        ? item.categoryId
+        : fallbackCategoryId;
+      return {
+        id: item.id || MozeData.uid(),
+        categoryId,
+        title: item.title || '',
+        amount: item.amount === 0 ? '0' : (item.amount || ''),
+      };
+    });
+    if (!rows.some(function (item) { return item.id === activeTxItemRowId; })) {
+      activeTxItemRowId = rows[0].id;
+    }
+    list.innerHTML = rows.map(function (item, index) {
+      return `<div class="tx-item-row${item.id === activeTxItemRowId ? ' active' : ''}" data-tx-item-row="${esc(item.id)}">
+        <div class="tx-item-row-grid">
+          <select class="tx-item-category">${modalItemOptions(item.categoryId)}</select>
+          <input class="tx-item-title" type="text" value="${esc(item.title)}" placeholder="名稱" list="tx-title-templates">
+          <input class="tx-item-amount" type="number" value="${esc(String(item.amount))}" step="0.01" placeholder="金額">
+        </div>
+        <div class="tx-item-actions">
+          <button class="tx-item-action" type="button" data-move-tx-item="up:${esc(item.id)}" ${index === 0 ? 'disabled' : ''}>↑</button>
+          <button class="tx-item-action" type="button" data-move-tx-item="down:${esc(item.id)}" ${index === rows.length - 1 ? 'disabled' : ''}>↓</button>
+          <button class="tx-item-action tx-item-remove" type="button" data-remove-tx-item="${esc(item.id)}" ${rows.length === 1 ? 'disabled' : ''}>✕</button>
+        </div>
+      </div>`;
+    }).join('');
+    renderModalLibraryLists();
+    syncModalItemsSummary();
+  }
+
+  function collectModalItems() {
+    return Array.from($$el('#tx-items-list .tx-item-row')).map(function (row) {
+      return {
+        id: row.dataset.txItemRow || MozeData.uid(),
+        categoryId: (row.querySelector('.tx-item-category') || {}).value || '',
+        title: ((row.querySelector('.tx-item-title') || {}).value || '').trim(),
+        amount: parseFloat((row.querySelector('.tx-item-amount') || {}).value) || 0,
+      };
+    }).filter(function (item) {
+      return item.amount > 0 || item.title;
+    });
+  }
 
   function openModal(existingTx) {
     const overlay = $('tx-modal-overlay');
     if (overlay) overlay.classList.add('open');
     editingTxId = existingTx && existingTx.id ? existingTx.id : null;
-    txType = existingTx && existingTx.type ? existingTx.type : 'expense';
-    updateModalType();
+    txMode = modeFromTx(existingTx);
+    txType = baseTypeForMode(txMode);
+    txAdvancedMode = advancedModeFromTx(existingTx);
+    txInstallmentDraft = existingTx && existingTx.installment
+      ? { ...existingTx.installment }
+      : defaultInstallmentDraft(existingTx ? (existingTx.amount || 0) : 0);
     const s = MozeData.getState();
     const modalTitle = $('tx-modal-title');
-    if (modalTitle) modalTitle.textContent = editingTxId ? '編輯交易' : '新增交易';
+    if (modalTitle) modalTitle.textContent = editingTxId ? '編輯記錄' : '新增記錄';
     const saveBtn = $('btn-save-tx');
     if (saveBtn) saveBtn.textContent = editingTxId ? '更新交易' : '儲存交易';
     populateAccountSelect('tx-account', false);
@@ -1603,46 +2168,100 @@
     if (txCategory) txCategory.value = existingTx ? (existingTx.categoryId || txCategory.value) : txCategory.value;
     const txProject = $('tx-project');
     if (txProject) txProject.value = existingTx ? (existingTx.projectId || '') : '';
+    const txMerchant = $('tx-merchant');
+    if (txMerchant) txMerchant.value = existingTx ? (existingTx.merchant || '') : '';
+    const txCounterpart = $('tx-counterpart');
+    if (txCounterpart) txCounterpart.value = existingTx ? (existingTx.counterpart || '') : '';
+    const txParentTitle = $('tx-parent-title');
+    if (txParentTitle) txParentTitle.value = existingTx ? (existingTx.title || '') : '';
     const txDate = $('tx-date');
     if (txDate) txDate.value = existingTx ? (existingTx.date || MozeData.today()) : MozeData.today();
+    const txDateTransfer = $('tx-date-transfer');
+    if (txDateTransfer) txDateTransfer.value = existingTx ? (existingTx.date || MozeData.today()) : MozeData.today();
     const txTime = $('tx-time');
     if (txTime) txTime.value = existingTx ? (existingTx.time || '00:00') : new Date().toTimeString().slice(0, 5);
-    const txAmount = $('tx-amount');
-    if (txAmount) txAmount.value = existingTx ? String(existingTx.amount || '') : '';
-    const txTitle = $('tx-title');
-    if (txTitle) txTitle.value = existingTx ? (existingTx.title || '') : '';
+    const txTimeTransfer = $('tx-time-transfer');
+    if (txTimeTransfer) txTimeTransfer.value = existingTx ? (existingTx.time || '00:00') : new Date().toTimeString().slice(0, 5);
+    const txAmountTransfer = $('tx-amount-transfer');
+    if (txAmountTransfer) txAmountTransfer.value = existingTx ? String(existingTx.amount || '') : '';
     const txNote = $('tx-note');
     if (txNote) txNote.value = existingTx ? (existingTx.note || '') : '';
+    const txNoteTransfer = $('tx-note-transfer');
+    if (txNoteTransfer) txNoteTransfer.value = existingTx ? (existingTx.note || '') : '';
     const txTags = $('tx-tags');
     if (txTags) txTags.value = existingTx ? ((existingTx.tags || []).join(', ')) : '';
     const txFee = $('tx-fee');
     if (txFee) txFee.value = existingTx ? String(existingTx.fee || 0) : '0';
+    const modalItems = existingTx && existingTx.type !== 'transfer'
+      ? MozeData.transactionItems(existingTx).map(function (item) {
+          return {
+            id: item.id,
+            categoryId: item.categoryId,
+            title: item.title || '',
+            amount: item.amount,
+          };
+        })
+      : [blankModalItem()];
+    activeTxItemRowId = modalItems[0] ? modalItems[0].id : '';
+    renderModalItemRows(modalItems);
+    updateModalType();
+    syncAdvancedSummary();
+    syncMirroredModalFields();
   }
 
   function closeModal() {
     const overlay = $('tx-modal-overlay');
     if (overlay) overlay.classList.remove('open');
     editingTxId = null;
+    txMode = 'expense';
+    txType = 'expense';
+    txAdvancedMode = 'single';
+    txInstallmentDraft = defaultInstallmentDraft(0);
+    activeTxItemRowId = '';
     const modalTitle = $('tx-modal-title');
-    if (modalTitle) modalTitle.textContent = '新增交易';
+    if (modalTitle) modalTitle.textContent = '新增記錄';
     const saveBtn = $('btn-save-tx');
     if (saveBtn) saveBtn.textContent = '儲存交易';
+    syncAdvancedSummary();
   }
 
   function updateModalType() {
-    $$el('#tx-type-tabs .type-tab').forEach(b => b.classList.toggle('active', b.dataset.type === txType));
+    $$el('#tx-type-tabs .type-tab').forEach(function (b) {
+      b.classList.toggle('active', b.dataset.mode === txMode);
+    });
     const transfer = $('tx-transfer-fields');
     const normal = $('tx-normal-fields');
     if (transfer) transfer.style.display = txType === 'transfer' ? 'block' : 'none';
     if (normal) normal.style.display = txType === 'transfer' ? 'none' : 'block';
+    const hint = $('tx-mode-hint');
+    if (hint) {
+      hint.textContent = modalHintText(txMode);
+      hint.style.display = hint.textContent ? 'block' : 'none';
+    }
+    if (txType !== 'transfer') {
+      const items = collectModalItems();
+      renderModalItemRows(items.length ? items : [blankModalItem(($('tx-category') || {}).value || '')]);
+    }
+    renderModalCategoryPills();
   }
 
   function saveTransaction() {
-    const amount = parseFloat(($('tx-amount') || {}).value);
-    if (!amount || amount <= 0) { alert('請輸入有效金額'); return; }
+    if (txType === 'transfer') syncBackFromTransferFields();
+    const items = txType === 'transfer' ? [] : collectModalItems();
+    const amount = txType === 'transfer'
+      ? parseFloat(($('tx-amount-transfer') || {}).value)
+      : items.reduce((sum, item) => sum + item.amount, 0);
+    if (!amount || amount <= 0) {
+      alert(txType === 'transfer' ? '請輸入有效金額' : '請至少新增一個有效內容');
+      return;
+    }
 
     const tagsRaw = ($('tx-tags') || {}).value || '';
     const tags = tagsRaw.split(/[,，]/).map(s => s.trim()).filter(Boolean);
+    const modeTag = (TX_MODE_META[txMode] || {}).tag;
+    if (modeTag && !tags.includes(modeTag)) tags.push(modeTag);
+    if (txAdvancedMode === 'recurring' && !tags.includes('週期草稿')) tags.push('週期草稿');
+    if (txAdvancedMode === 'installment' && !tags.includes('分期草稿')) tags.push('分期草稿');
 
     const tx = {
       type: txType,
@@ -1650,17 +2269,23 @@
       fee: parseFloat(($('tx-fee') || {}).value) || 0,
       accountId: txType === 'transfer' ? (($('tx-from-account') || {}).value || '') : (($('tx-account') || {}).value || ''),
       toAccountId: txType === 'transfer' ? (($('tx-to-account') || {}).value || '') : '',
-      categoryId: ($('tx-category') || {}).value || '',
-      date: ($('tx-date') || {}).value || MozeData.today(),
-      time: ($('tx-time') || {}).value || '00:00',
-      title: ($('tx-title') || {}).value || '',
-      note: ($('tx-note') || {}).value || '',
+      categoryId: txType === 'transfer' ? '' : ((items[0] || {}).categoryId || (($('tx-category') || {}).value || '')),
+      date: (txType === 'transfer' ? ($('tx-date-transfer') || {}).value : ($('tx-date') || {}).value) || MozeData.today(),
+      time: (txType === 'transfer' ? ($('tx-time-transfer') || {}).value : ($('tx-time') || {}).value) || '00:00',
+      title: txType === 'transfer' ? '' : ((($('tx-parent-title') || {}).value || '').trim() || ((items[0] || {}).title || '')),
+      merchant: (($('tx-merchant') || {}).value || '').trim(),
+      counterpart: (($('tx-counterpart') || {}).value || '').trim(),
+      note: (txType === 'transfer' ? ($('tx-note-transfer') || {}).value : ($('tx-note') || {}).value) || '',
       tags,
+      items,
+      installment: txAdvancedMode === 'installment' ? installmentPreview(txInstallmentDraft || defaultInstallmentDraft(amount)) : null,
       projectId: ($('tx-project') || {}).value || '',
     };
 
     if (editingTxId) MozeData.updateTransaction(editingTxId, tx);
     else MozeData.addTransaction(tx);
+    if (tx.merchant) MozeData.addLibraryEntry('merchants', tx.merchant);
+    if (tx.counterpart) MozeData.addLibraryEntry('counterparts', tx.counterpart);
     closeModal();
     refreshAll();
   }
@@ -1682,11 +2307,70 @@
       n.addEventListener('click', () => switchView(n.dataset.view));
     });
 
+    $$el('[data-more-pane-nav]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        switchMorePane(btn.dataset.morePaneNav);
+      });
+    });
+
+    const btnGoProjects = $('btn-go-projects');
+    if (btnGoProjects) btnGoProjects.addEventListener('click', function () {
+      switchView('projects');
+    });
+    const btnGoErrorlogs = $('btn-go-errorlogs');
+    if (btnGoErrorlogs) btnGoErrorlogs.addEventListener('click', function () {
+      switchView('errorlogs');
+    });
+
     /* 日期區間 */
     const rs = $('range-start');
     const re = $('range-end');
     if (rs) rs.addEventListener('change', () => { rangeStart = rs.value; refreshAll(); });
     if (re) re.addEventListener('change', () => { rangeEnd = re.value; refreshAll(); });
+
+    document.addEventListener('click', function (event) {
+      const dateInput = event.target.closest('[data-date-picker]');
+      const insidePicker = event.target.closest('#date-picker-popover');
+      const overlay = $('date-picker-overlay');
+
+      if (dateInput) {
+        event.preventDefault();
+        openDatePicker(dateInput);
+        return;
+      }
+
+      if (overlay && overlay.classList.contains('open') && !insidePicker) {
+        closeDatePicker();
+      }
+    });
+
+    document.addEventListener('focusin', function (event) {
+      const dateInput = event.target.closest('[data-date-picker]');
+      if (dateInput) openDatePicker(dateInput);
+    });
+
+    document.addEventListener('keydown', function (event) {
+      if (event.key === 'Escape') closeDatePicker();
+    });
+
+    const dpPrev = $('date-picker-prev');
+    const dpNext = $('date-picker-next');
+    const dpToday = $('date-picker-today');
+    const dpClose = $('date-picker-close');
+    if (dpPrev) dpPrev.addEventListener('click', function () {
+      datePickerMonth = MozeData.addMonths(datePickerMonth, -1);
+      renderDatePicker();
+    });
+    if (dpNext) dpNext.addEventListener('click', function () {
+      datePickerMonth = MozeData.addMonths(datePickerMonth, 1);
+      renderDatePicker();
+    });
+    if (dpToday) dpToday.addEventListener('click', function () {
+      if (!datePickerTarget) return;
+      setDateInputValue(datePickerTarget, MozeData.today());
+      closeDatePicker();
+    });
+    if (dpClose) dpClose.addEventListener('click', closeDatePicker);
 
     const rp = $('range-prev');
     const rn = $('range-next');
@@ -1842,6 +2526,36 @@
       renderSettings();
     });
 
+    const btnAddMerchant = $('btn-add-merchant');
+    if (btnAddMerchant) btnAddMerchant.addEventListener('click', () => {
+      const input = $('new-merchant-name');
+      const name = ((input || {}).value || '').trim();
+      if (!name) return;
+      MozeData.addLibraryEntry('merchants', name);
+      if (input) input.value = '';
+      renderSettings();
+    });
+
+    const btnAddCounterpart = $('btn-add-counterpart');
+    if (btnAddCounterpart) btnAddCounterpart.addEventListener('click', () => {
+      const input = $('new-counterpart-name');
+      const name = ((input || {}).value || '').trim();
+      if (!name) return;
+      MozeData.addLibraryEntry('counterparts', name);
+      if (input) input.value = '';
+      renderSettings();
+    });
+
+    const btnAddTemplate = $('btn-add-template');
+    if (btnAddTemplate) btnAddTemplate.addEventListener('click', () => {
+      const input = $('new-template-name');
+      const name = ((input || {}).value || '').trim();
+      if (!name) return;
+      MozeData.addLibraryEntry('titleTemplates', name);
+      if (input) input.value = '';
+      renderSettings();
+    });
+
     const btnExport = $('btn-export');
     if (btnExport) btnExport.addEventListener('click', () => {
       const json = MozeData.exportJSON();
@@ -1879,18 +2593,165 @@
     if (fabAdd) fabAdd.addEventListener('click', openModal);
     const btnClose = $('tx-modal-close');
     if (btnClose) btnClose.addEventListener('click', closeModal);
+    const btnCancelTx = $('btn-cancel-tx');
+    if (btnCancelTx) btnCancelTx.addEventListener('click', closeModal);
     const overlay = $('tx-modal-overlay');
     if (overlay) overlay.addEventListener('click', (e) => { if (e.target === overlay) closeModal(); });
 
+    const categoryPills = $('tx-category-pills');
+    if (categoryPills) {
+      categoryPills.addEventListener('click', function (event) {
+        const btn = event.target.closest('[data-tx-category]');
+        if (!btn) return;
+        const select = $('tx-category');
+        if (!select) return;
+        select.value = btn.dataset.txCategory;
+        const nextItems = collectModalItems();
+        const targetId = activeTxItemRowId || ((nextItems[0] || {}).id);
+        const patchedItems = nextItems.map(function (item) {
+          return item.id === targetId ? { ...item, categoryId: btn.dataset.txCategory } : item;
+        });
+        if (!patchedItems.length) patchedItems.push(blankModalItem(btn.dataset.txCategory));
+        renderModalItemRows(patchedItems);
+        renderModalCategoryPills();
+      });
+    }
+
     $$el('#tx-type-tabs .type-tab').forEach(tab => {
       tab.addEventListener('click', () => {
-        txType = tab.dataset.type;
-        updateModalType();
+        setModalMode(tab.dataset.mode);
       });
     });
 
     const btnSaveTx = $('btn-save-tx');
     if (btnSaveTx) btnSaveTx.addEventListener('click', saveTransaction);
+    const btnSaveTxTop = $('btn-save-tx-top');
+    if (btnSaveTxTop) btnSaveTxTop.addEventListener('click', saveTransaction);
+
+    const time = $('tx-time');
+    const timeTransfer = $('tx-time-transfer');
+    const note = $('tx-note');
+    const noteTransfer = $('tx-note-transfer');
+    const date = $('tx-date');
+    const dateTransfer = $('tx-date-transfer');
+    if (time && timeTransfer) {
+      time.addEventListener('input', function () { timeTransfer.value = time.value; });
+      timeTransfer.addEventListener('input', function () { time.value = timeTransfer.value; });
+    }
+    if (note && noteTransfer) {
+      note.addEventListener('input', function () { noteTransfer.value = note.value; });
+      noteTransfer.addEventListener('input', function () { note.value = noteTransfer.value; });
+    }
+    if (date && dateTransfer) {
+      date.addEventListener('change', function () { dateTransfer.value = date.value; });
+      dateTransfer.addEventListener('change', function () { date.value = dateTransfer.value; });
+    }
+
+    const btnOpenAdvanced = $('btn-open-advanced-settings');
+    if (btnOpenAdvanced) btnOpenAdvanced.addEventListener('click', openAdvancedModal);
+    const btnCloseAdvanced = $('tx-advanced-close');
+    if (btnCloseAdvanced) btnCloseAdvanced.addEventListener('click', closeAdvancedModal);
+    const btnCancelAdvanced = $('tx-advanced-cancel');
+    if (btnCancelAdvanced) btnCancelAdvanced.addEventListener('click', closeAdvancedModal);
+    const btnConfirmAdvanced = $('tx-advanced-confirm');
+    if (btnConfirmAdvanced) {
+      btnConfirmAdvanced.addEventListener('click', function () {
+        if (txAdvancedDraftMode === 'installment') {
+          txInstallmentDraft = readInstallmentDraftFromFields();
+        }
+        txAdvancedMode = txAdvancedDraftMode;
+        syncAdvancedSummary();
+        closeAdvancedModal();
+      });
+    }
+    const advancedOverlay = $('tx-advanced-overlay');
+    if (advancedOverlay) {
+      advancedOverlay.addEventListener('click', function (event) {
+        if (event.target === advancedOverlay) closeAdvancedModal();
+      });
+    }
+    $$el('#tx-advanced-tabs .type-tab').forEach(function (tab) {
+      tab.addEventListener('click', function () {
+        if (txAdvancedDraftMode === 'installment') {
+          txInstallmentDraft = readInstallmentDraftFromFields();
+        }
+        txAdvancedDraftMode = tab.dataset.advancedMode;
+        renderAdvancedTabs();
+      });
+    });
+
+    ['tx-installment-total','tx-installment-periods','tx-installment-interest-type','tx-installment-interest-value','tx-installment-rounding','tx-installment-first-payment','tx-installment-booking-mode','tx-installment-grace-periods','tx-installment-reward-mode']
+      .forEach(function (id) {
+        const input = $(id);
+        if (!input) return;
+        input.addEventListener('input', function () {
+          txInstallmentDraft = readInstallmentDraftFromFields();
+          renderInstallmentDraft();
+        });
+        input.addEventListener('change', function () {
+          txInstallmentDraft = readInstallmentDraftFromFields();
+          renderInstallmentDraft();
+        });
+      });
+
+    const btnAddTxItemRow = $('btn-add-tx-item-row');
+    if (btnAddTxItemRow) {
+      btnAddTxItemRow.addEventListener('click', function () {
+        const rows = collectModalItems();
+        const newItem = blankModalItem(($('tx-category') || {}).value || '');
+        rows.push(newItem);
+        activeTxItemRowId = newItem.id;
+        renderModalItemRows(rows);
+      });
+    }
+    const txItemsList = $('tx-items-list');
+    if (txItemsList) {
+      txItemsList.addEventListener('focusin', function (event) {
+        const row = event.target.closest('.tx-item-row');
+        if (!row) return;
+        setActiveTxItemRow(row.dataset.txItemRow);
+      });
+      txItemsList.addEventListener('click', function (event) {
+        const row = event.target.closest('.tx-item-row');
+        if (row) setActiveTxItemRow(row.dataset.txItemRow);
+      });
+      txItemsList.addEventListener('input', function () {
+        syncModalItemsSummary();
+        if (txAdvancedMode === 'installment') syncAdvancedSummary();
+      });
+      txItemsList.addEventListener('change', function () {
+        syncModalItemsSummary();
+        if (txAdvancedMode === 'installment') syncAdvancedSummary();
+        renderModalCategoryPills();
+      });
+      txItemsList.addEventListener('click', function (event) {
+        const moveBtn = event.target.closest('[data-move-tx-item]');
+        if (moveBtn) {
+          const [direction, id] = moveBtn.dataset.moveTxItem.split(':');
+          const rows = collectModalItems();
+          const index = rows.findIndex(function (item) { return item.id === id; });
+          if (index === -1) return;
+          const swapIndex = direction === 'up' ? index - 1 : index + 1;
+          if (swapIndex < 0 || swapIndex >= rows.length) return;
+          const temp = rows[index];
+          rows[index] = rows[swapIndex];
+          rows[swapIndex] = temp;
+          activeTxItemRowId = id;
+          renderModalItemRows(rows);
+          return;
+        }
+        const btn = event.target.closest('[data-remove-tx-item]');
+        if (!btn) return;
+        const rows = collectModalItems();
+        const removedIndex = rows.findIndex(function (item) { return item.id === btn.dataset.removeTxItem; });
+        const nextRows = rows.filter(function (item) {
+          return item.id !== btn.dataset.removeTxItem;
+        });
+        const fallback = nextRows[Math.max(0, removedIndex - 1)] || nextRows[0];
+        activeTxItemRowId = fallback ? fallback.id : '';
+        renderModalItemRows(nextRows.length ? nextRows : [blankModalItem(($('tx-category') || {}).value || '')]);
+      });
+    }
 
     const btnOpenAuth = $('btn-open-auth-modal');
     if (btnOpenAuth) btnOpenAuth.addEventListener('click', openAuthModal);

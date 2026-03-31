@@ -53,7 +53,7 @@
         <span class="nav-icon">🚨</span> 開發者欄位
       </div>
       <div class="nav-item" data-view="settings">
-        <span class="nav-icon">⚙️</span> 設定
+        <span class="nav-icon">🧰</span> 更多
       </div>
     </nav>
     <div class="sidebar-bottom">
@@ -75,9 +75,9 @@
       <span class="topbar-title" id="topbar-title">概覽</span>
       <div class="topbar-range">
         <button id="range-prev" title="上一段">◀</button>
-        <input type="date" id="range-start">
+        <input type="text" id="range-start" class="date-text-input" data-date-picker readonly inputmode="none" placeholder="YYYY-MM-DD">
         <span style="color:var(--text-muted)">～</span>
-        <input type="date" id="range-end">
+        <input type="text" id="range-end" class="date-text-input" data-date-picker readonly inputmode="none" placeholder="YYYY-MM-DD">
         <button id="range-next" title="下一段">▶</button>
       </div>
     </div>
@@ -138,7 +138,7 @@
                   <option value="income">收入</option>
                 </select>
                 <select id="up-account"></select>
-                <input type="date" id="up-date" class="full-span">
+                <input type="text" id="up-date" class="full-span date-text-input" data-date-picker readonly inputmode="none" placeholder="YYYY-MM-DD">
                 <button class="btn btn-primary btn-sm full-span" id="btn-add-upcoming">新增提醒</button>
               </div>
             </div>
@@ -328,7 +328,7 @@
                     <input type="text" id="new-proj-icon" placeholder="圖示" maxlength="4" value="📁">
                   </div>
                   <div class="form-group">
-                    <input type="date" id="new-proj-start">
+                    <input type="text" id="new-proj-start" class="date-text-input" data-date-picker readonly inputmode="none" placeholder="YYYY-MM-DD">
                   </div>
                 </div>
                 <button class="btn btn-primary btn-sm btn-block" id="btn-add-project">新增專案</button>
@@ -436,54 +436,142 @@
 
       <!-- ⑩ 設定頁 -->
       <div class="view" id="view-settings">
-        <div class="settings-section">
-          <h3>總負債金額</h3>
-          <div class="settings-row">
-            <label>負債金額</label>
-            <input type="number" id="settings-liabilities" placeholder="0" step="1" style="width:160px">
-            <button class="btn btn-primary btn-sm" id="btn-save-liabilities">儲存</button>
-          </div>
-        </div>
-        <div class="settings-section">
-          <h3>分類管理</h3>
-          <div id="settings-cat-list"></div>
-          <div class="form-row" style="margin-top:10px">
-            <div class="form-group">
-              <input type="text" id="new-cat-icon" placeholder="圖示" maxlength="4" value="📦">
+        <div class="more-layout">
+          <aside class="more-sidebar">
+            <div class="more-sidebar-title">更多功能</div>
+            <div class="more-sidebar-nav">
+              <button class="more-nav-item active" type="button" data-more-pane-nav="general">設定</button>
+              <button class="more-nav-item" type="button" data-more-pane-nav="categories">類別</button>
+              <button class="more-nav-item" type="button" data-more-pane-nav="libraries">名稱庫</button>
+              <button class="more-nav-item" type="button" data-more-pane-nav="projects">專案</button>
+              <button class="more-nav-item" type="button" data-more-pane-nav="account-groups">帳戶分組</button>
+              <button class="more-nav-item" type="button" data-more-pane-nav="backup">備份 / 還原</button>
+              <button class="more-nav-item" type="button" data-more-pane-nav="developer">開發者</button>
             </div>
-            <div class="form-group">
-              <input type="text" id="new-cat-name" placeholder="分類名稱">
-            </div>
-          </div>
-          <button class="btn btn-primary btn-sm" id="btn-add-cat">新增分類</button>
-        </div>
-        <div class="settings-section">
-          <h3>備份</h3>
-          <div style="display:flex;gap:10px;flex-wrap:wrap">
-            <button class="btn btn-secondary" id="btn-export">匯出 JSON</button>
-            <button class="btn btn-secondary" id="btn-import">從 JSON 還原</button>
-            <input type="file" id="import-file" accept=".json" style="display:none">
-          </div>
-        </div>
-        <div class="settings-section" id="admin-panel" style="display:none">
-          <h3>🔒 製作人員面板</h3>
-          <div class="card" style="padding:16px">
-            <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
-              <span style="font-size:28px">👥</span>
-              <div>
-                <div style="color:var(--text-dim);font-size:12px">註冊人數</div>
-                <div id="admin-user-count" style="font-size:24px;font-weight:700;color:var(--accent)">—</div>
+          </aside>
+          <div class="more-content">
+            <section class="more-pane active" data-more-pane="general">
+              <div class="settings-section">
+                <h3>總負債金額</h3>
+                <div class="settings-row">
+                  <label>負債金額</label>
+                  <input type="number" id="settings-liabilities" placeholder="0" step="1" style="width:160px">
+                  <button class="btn btn-primary btn-sm" id="btn-save-liabilities">儲存</button>
+                </div>
               </div>
-            </div>
-            <div id="admin-user-list" style="font-size:12px;color:var(--text-dim);max-height:200px;overflow-y:auto"></div>
+            </section>
+            <section class="more-pane" data-more-pane="categories">
+              <div class="settings-section">
+                <h3>分類管理</h3>
+                <div id="settings-cat-list"></div>
+                <div class="form-row" style="margin-top:10px">
+                  <div class="form-group">
+                    <input type="text" id="new-cat-icon" placeholder="圖示" maxlength="4" value="📦">
+                  </div>
+                  <div class="form-group">
+                    <input type="text" id="new-cat-name" placeholder="分類名稱">
+                  </div>
+                </div>
+                <button class="btn btn-primary btn-sm" id="btn-add-cat">新增分類</button>
+              </div>
+            </section>
+            <section class="more-pane" data-more-pane="libraries">
+              <div class="settings-section">
+                <h3>商家名稱庫</h3>
+                <div id="settings-merchant-list"></div>
+                <div class="settings-inline-form">
+                  <input type="text" id="new-merchant-name" placeholder="新增商家">
+                  <button class="btn btn-primary btn-sm" id="btn-add-merchant">新增商家</button>
+                </div>
+              </div>
+              <div class="settings-section">
+                <h3>對象名稱庫</h3>
+                <div id="settings-counterpart-list"></div>
+                <div class="settings-inline-form">
+                  <input type="text" id="new-counterpart-name" placeholder="新增對象">
+                  <button class="btn btn-primary btn-sm" id="btn-add-counterpart">新增對象</button>
+                </div>
+              </div>
+              <div class="settings-section">
+                <h3>名稱範本</h3>
+                <div id="settings-template-list"></div>
+                <div class="settings-inline-form">
+                  <input type="text" id="new-template-name" placeholder="新增名稱範本">
+                  <button class="btn btn-primary btn-sm" id="btn-add-template">新增範本</button>
+                </div>
+              </div>
+            </section>
+            <section class="more-pane" data-more-pane="projects">
+              <div class="settings-section">
+                <h3>專案</h3>
+                <div class="settings-help-text">先保留既有專案頁的完整能力。這裡先提供統一入口，下一步再搬成 split view 管理。</div>
+                <button class="btn btn-secondary" id="btn-go-projects" type="button">前往專案頁</button>
+              </div>
+            </section>
+            <section class="more-pane" data-more-pane="account-groups">
+              <div class="settings-section">
+                <h3>帳戶分組</h3>
+                <div class="settings-help-text">第一階段先展示目前使用中的帳戶分組。CRUD 之後再接。</div>
+                <div id="more-account-group-list"></div>
+              </div>
+            </section>
+            <section class="more-pane" data-more-pane="backup">
+              <div class="settings-section">
+                <h3>備份</h3>
+                <div class="settings-help-text">匯出將包含 schema 版本與匯出時間；舊版 JSON 仍可匯入。</div>
+                <div style="display:flex;gap:10px;flex-wrap:wrap">
+                  <button class="btn btn-secondary" id="btn-export">匯出 JSON</button>
+                  <button class="btn btn-secondary" id="btn-import">從 JSON 還原</button>
+                  <input type="file" id="import-file" accept=".json" style="display:none">
+                </div>
+              </div>
+            </section>
+            <section class="more-pane" data-more-pane="developer">
+              <div class="settings-section">
+                <h3>開發者欄位</h3>
+                <div class="settings-help-text">管理員可在這裡看到註冊統計；完整報錯與反饋收件匣仍保留在開發者欄位頁。</div>
+                <button class="btn btn-secondary" id="btn-go-errorlogs" type="button">前往開發者欄位頁</button>
+              </div>
+              <div class="settings-section" id="admin-panel" style="display:none">
+                <h3>🔒 製作人員面板</h3>
+                <div class="card" style="padding:16px">
+                  <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+                    <span style="font-size:28px">👥</span>
+                    <div>
+                      <div style="color:var(--text-dim);font-size:12px">註冊人數</div>
+                      <div id="admin-user-count" style="font-size:24px;font-weight:700;color:var(--accent)">—</div>
+                    </div>
+                  </div>
+                  <div id="admin-user-list" style="font-size:12px;color:var(--text-dim);max-height:200px;overflow-y:auto"></div>
+                </div>
+                <div style="margin-top:12px;font-size:11px;color:var(--text-muted)">此區塊僅管理員可見</div>
+              </div>
+            </section>
           </div>
-          <div style="margin-top:12px;font-size:11px;color:var(--text-muted)">此區塊僅管理員可見</div>
         </div>
       </div>
 
     </div><!-- end view-container -->
   </div><!-- end main-content -->
 </div><!-- end app-layout -->
+
+<div class="date-picker-overlay" id="date-picker-overlay" aria-hidden="true">
+  <div class="date-picker-popover" id="date-picker-popover" role="dialog" aria-modal="true" aria-label="選擇日期">
+    <div class="date-picker-header">
+      <button class="date-picker-nav" id="date-picker-prev" type="button">◀</button>
+      <div class="date-picker-title" id="date-picker-title">2026 / 03</div>
+      <button class="date-picker-nav" id="date-picker-next" type="button">▶</button>
+    </div>
+    <div class="date-picker-weekdays">
+      <span>日</span><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span>
+    </div>
+    <div class="date-picker-grid" id="date-picker-grid"></div>
+    <div class="date-picker-actions">
+      <button class="btn btn-secondary btn-sm" id="date-picker-today" type="button">今天</button>
+      <button class="btn btn-secondary btn-sm" id="date-picker-close" type="button">關閉</button>
+    </div>
+  </div>
+</div>
 
 <!-- ===== 手機底部導航 ===== -->
 <nav class="bottom-nav">
@@ -512,7 +600,7 @@
     <span class="bnav-icon">💬</span>反饋
   </button>
   <button class="bnav-item" data-view="settings">
-    <span class="bnav-icon">⚙️</span>設定
+    <span class="bnav-icon">🧰</span>更多
   </button>
 </nav>
 <button class="fab-add" id="fab-add-tx" title="新增交易">＋</button>
@@ -541,87 +629,245 @@
 
 <!-- ===== 新增交易彈窗 ===== -->
 <div class="modal-overlay" id="tx-modal-overlay">
-  <div class="modal">
+  <div class="modal tx-modal tx-modal-redesign">
     <div class="modal-header">
-      <span class="modal-title" id="tx-modal-title">新增交易</span>
-      <button class="modal-close" id="tx-modal-close">✕</button>
+      <button class="modal-close tx-modal-icon-btn" id="tx-modal-close" type="button">✕</button>
+      <span class="modal-title" id="tx-modal-title">新增記錄</span>
+      <button class="modal-close tx-modal-icon-btn" id="btn-save-tx-top" type="button">✓</button>
     </div>
 
     <div class="type-tabs" id="tx-type-tabs">
-      <button class="type-tab active" data-type="expense">支出</button>
-      <button class="type-tab" data-type="income">收入</button>
-      <button class="type-tab" data-type="transfer">轉帳</button>
+      <button class="type-tab active" data-mode="expense">支出</button>
+      <button class="type-tab" data-mode="income">收入</button>
+      <button class="type-tab" data-mode="transfer">轉帳</button>
+      <button class="type-tab" data-mode="receivable">應收款項</button>
+      <button class="type-tab" data-mode="payable">應付款項</button>
+      <button class="type-tab" data-mode="system">系統</button>
+    </div>
+
+    <div class="tx-phase-note" id="tx-mode-hint"></div>
+
+    <div id="tx-normal-fields">
+      <div class="tx-section">
+        <div class="tx-section-title">快速分類</div>
+        <div class="tx-category-pills" id="tx-category-pills"></div>
+        <select id="tx-category" style="display:none"></select>
+      </div>
+
+      <div class="tx-dual-grid">
+        <div class="tx-field">
+          <label>帳戶</label>
+          <select id="tx-account"></select>
+        </div>
+        <div class="tx-field">
+          <label>專案</label>
+          <select id="tx-project">
+            <option value="">無專案</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="tx-dual-grid">
+        <div class="tx-field">
+          <label>商家</label>
+          <input type="text" id="tx-merchant" list="tx-merchants" placeholder="輸入或選擇商家">
+          <datalist id="tx-merchants"></datalist>
+        </div>
+        <div class="tx-field">
+          <label>對象</label>
+          <input type="text" id="tx-counterpart" list="tx-counterparts" placeholder="輸入或選擇對象">
+          <datalist id="tx-counterparts"></datalist>
+        </div>
+      </div>
+
+      <datalist id="tx-title-templates"></datalist>
+
+      <div class="tx-dual-grid">
+        <div class="tx-field">
+          <label>日期</label>
+          <input type="text" id="tx-date" class="date-text-input" data-date-picker readonly inputmode="none" placeholder="YYYY-MM-DD">
+        </div>
+        <div class="tx-field">
+          <label>時間</label>
+          <input type="time" id="tx-time">
+        </div>
+      </div>
+
+      <div class="tx-dual-grid">
+        <div class="tx-field">
+          <label>主名稱</label>
+          <input type="text" id="tx-parent-title" placeholder="例如：買遊戲">
+        </div>
+        <div class="tx-field">
+          <label>標籤</label>
+          <input type="text" id="tx-tags" placeholder="標籤1, 標籤2">
+        </div>
+      </div>
+
+      <div class="tx-dual-grid">
+        <div class="tx-field">
+          <label>進階設定</label>
+          <button class="tx-inline-button" id="btn-open-advanced-settings" type="button">單次</button>
+        </div>
+        <div class="tx-field">
+          <label>內容說明</label>
+          <input type="text" value="每列可填一個內容名稱與金額" readonly>
+        </div>
+      </div>
+
+      <div class="tx-section">
+        <div class="tx-items-toolbar">
+          <div class="tx-items-toolbar-meta">
+            <span>內容</span>
+            <strong id="tx-items-total">合計 $0</strong>
+          </div>
+          <button class="btn btn-secondary btn-sm" id="btn-add-tx-item-row" type="button">＋ 新增內容</button>
+        </div>
+        <div id="tx-items-list"></div>
+      </div>
+
+      <div class="tx-field">
+        <label>備註</label>
+        <textarea id="tx-note" placeholder="備註"></textarea>
+      </div>
     </div>
 
     <!-- 轉帳專用 -->
     <div id="tx-transfer-fields" style="display:none">
-      <div class="form-row">
-        <div class="form-group">
-          <label>轉出帳戶</label>
-          <select id="tx-from-account"></select>
+      <div class="tx-transfer-card">
+        <div class="tx-dual-grid">
+          <div class="tx-field">
+            <label>轉出帳戶</label>
+            <select id="tx-from-account"></select>
+          </div>
+          <div class="tx-field">
+            <label>轉入帳戶</label>
+            <select id="tx-to-account"></select>
+          </div>
         </div>
-        <div class="form-group">
-          <label>轉入帳戶</label>
-          <select id="tx-to-account"></select>
+        <div class="tx-dual-grid">
+          <div class="tx-field">
+            <label>金額</label>
+            <input type="number" id="tx-amount-transfer" step="0.01" placeholder="0">
+          </div>
+          <div class="tx-field">
+            <label>手續費</label>
+            <input type="number" id="tx-fee" step="0.01" value="0">
+          </div>
         </div>
-      </div>
-      <div class="form-group">
-        <label>手續費</label>
-        <input type="number" id="tx-fee" step="0.01" value="0">
+        <div class="tx-dual-grid">
+          <div class="tx-field">
+            <label>日期</label>
+            <input type="text" id="tx-date-transfer" class="date-text-input" data-date-picker readonly inputmode="none" placeholder="YYYY-MM-DD">
+          </div>
+          <div class="tx-field">
+            <label>時間</label>
+            <input type="time" id="tx-time-transfer">
+          </div>
+        </div>
+        <div class="tx-field">
+          <label>備註</label>
+          <textarea id="tx-note-transfer" placeholder="轉帳備註"></textarea>
+        </div>
       </div>
     </div>
 
-    <!-- 一般模式 -->
-    <div id="tx-normal-fields">
-      <div class="form-row">
-        <div class="form-group">
-          <label>帳戶</label>
-          <select id="tx-account"></select>
-        </div>
-        <div class="form-group">
-          <label>分類</label>
-          <select id="tx-category"></select>
-        </div>
-      </div>
+    <div class="tx-modal-actions">
+      <button class="btn btn-secondary" id="btn-cancel-tx" type="button">取消</button>
+      <button class="btn btn-primary" id="btn-save-tx" type="button">儲存交易</button>
     </div>
+  </div>
+</div>
 
-    <!-- 共用欄位 -->
-    <div class="form-group">
-      <label>金額</label>
-      <input type="number" id="tx-amount" step="0.01" placeholder="0">
+<div class="modal-overlay" id="tx-advanced-overlay">
+  <div class="modal tx-advanced-modal">
+    <div class="modal-header">
+      <span class="modal-title">進階設定</span>
+      <button class="modal-close" id="tx-advanced-close" type="button">✕</button>
     </div>
-    <div class="form-row">
-      <div class="form-group">
-        <label>日期</label>
-        <input type="date" id="tx-date">
-      </div>
-      <div class="form-group">
-        <label>時間</label>
-        <input type="time" id="tx-time">
-      </div>
+    <div class="type-tabs tx-advanced-tabs" id="tx-advanced-tabs">
+      <button class="type-tab active" data-advanced-mode="single">單次</button>
+      <button class="type-tab" data-advanced-mode="recurring">週期</button>
+      <button class="type-tab" data-advanced-mode="installment">分期</button>
     </div>
-    <div class="form-group">
-      <label>標題</label>
-      <input type="text" id="tx-title" placeholder="交易標題">
-    </div>
-    <div class="form-group">
-      <label>備註</label>
-      <textarea id="tx-note" placeholder="備註"></textarea>
-    </div>
-    <div class="form-row">
-      <div class="form-group">
-        <label>標籤（逗號分隔）</label>
-        <input type="text" id="tx-tags" placeholder="標籤1, 標籤2">
-      </div>
-      <div class="form-group">
-        <label>專案</label>
-        <select id="tx-project">
-          <option value="">無</option>
-        </select>
+    <div class="tx-phase-note" id="tx-advanced-note">第一階段先完成 UI。週期與分期會在後續資料模型升級後接上。</div>
+    <div class="tx-advanced-summary">
+      <div class="tx-advanced-row">
+        <span>入帳方式</span>
+        <strong id="tx-advanced-summary-text">立即入帳</strong>
       </div>
     </div>
-
-    <button class="btn btn-primary btn-block" id="btn-save-tx" style="margin-top:10px">儲存交易</button>
+    <div class="tx-advanced-panel" id="tx-advanced-installment-panel" style="display:none">
+      <div class="tx-advanced-grid">
+        <div class="tx-field">
+          <label>分期總金額</label>
+          <input type="number" id="tx-installment-total" step="0.01" placeholder="尚未設定">
+        </div>
+        <div class="tx-field">
+          <label>分期期數</label>
+          <input type="number" id="tx-installment-periods" step="1" min="1" value="3">
+        </div>
+      </div>
+      <div class="tx-advanced-grid">
+        <div class="tx-field">
+          <label>利息類型</label>
+          <select id="tx-installment-interest-type">
+            <option value="none">無利息</option>
+            <option value="fixed_total">固定總利息</option>
+            <option value="fixed_each">每期固定利息</option>
+            <option value="annual_rate">年利率</option>
+          </select>
+        </div>
+        <div class="tx-field">
+          <label>利息值</label>
+          <input type="number" id="tx-installment-interest-value" step="0.01" value="0">
+        </div>
+      </div>
+      <div class="tx-advanced-grid">
+        <div class="tx-field">
+          <label>分期計算方式</label>
+          <select id="tx-installment-rounding">
+            <option value="last_adjust">最後一期補差額</option>
+            <option value="round">四捨五入</option>
+          </select>
+        </div>
+        <div class="tx-field">
+          <label>每期金額</label>
+          <input type="text" id="tx-installment-per-period" readonly placeholder="0">
+        </div>
+      </div>
+      <div class="tx-advanced-grid">
+        <div class="tx-field">
+          <label>首期金額</label>
+          <input type="number" id="tx-installment-first-payment" step="0.01" value="0">
+        </div>
+        <div class="tx-field">
+          <label>入帳方式</label>
+          <select id="tx-installment-booking-mode">
+            <option value="immediate">立即入帳</option>
+            <option value="per_period">按期入帳</option>
+          </select>
+        </div>
+      </div>
+      <div class="tx-advanced-grid">
+        <div class="tx-field">
+          <label>寬限期</label>
+          <input type="number" id="tx-installment-grace-periods" step="1" min="0" value="0">
+        </div>
+        <div class="tx-field">
+          <label>回饋納入</label>
+          <select id="tx-installment-reward-mode">
+            <option value="each_period">每期</option>
+            <option value="first_period">首期</option>
+            <option value="none">不納入</option>
+          </select>
+        </div>
+      </div>
+    </div>
+    <div class="tx-modal-actions">
+      <button class="btn btn-secondary" id="tx-advanced-cancel" type="button">取消</button>
+      <button class="btn btn-primary" id="tx-advanced-confirm" type="button">確定</button>
+    </div>
   </div>
 </div>
 
